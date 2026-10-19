@@ -97,6 +97,9 @@ button.small { font-size: 13px; padding: 4px 10px; }
 .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
 .total { text-align: right; padding-top: 7px; }
 .flag { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 4px; background: var(--warn-soft); color: var(--warn); }
+.szabas { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+.szabas summary { cursor: pointer; font-weight: 600; }
+.szabas textarea { width: 100%; min-height: 110px; margin: 8px 0; font-family: var(--font-mono); font-size: 13px; border: 1px solid var(--line); border-radius: 6px; padding: 8px; background: var(--panel); }
 .picker { grid-column: 1 / -1; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px; display: grid; gap: 8px; }
 .picker .results { max-height: 320px; overflow-y: auto; display: grid; }
 .res { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 12px; padding: 7px 6px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; text-align: left; width: 100%; }
@@ -417,6 +420,7 @@ td.r, th.r { text-align: right; }
   }
   // l: anyagsor egy termékre; n: a projektben készülő darabszám. A kerekítés (egész szál, tábla) az összes darabra együtt történik.
   function lineCalc(l, n = 1) {
+    if (l.fix) n = 1; // szabásból jövő sor: a mennyiség már a teljes rendelésre szól
     const q1 = num(l.qty), q = q1 * n;
     if (l.kat === EGYEDI) {
       // árlistában nem szereplő anyag: nettó egységár kézzel
@@ -429,7 +433,9 @@ td.r, th.r { text-align: right; }
     const o = opts.find((x) => x.u === l.unit) || opts[0];
     const r = o.calc(q);
     const net = r.gross / VAT_BASE;
-    return { it, opts, o, r, q, n, net, netPer: r.bill ? net / r.bill : 0, kg: q ? weightOf(it, q, o.u) : 0, missing: !byUrl.get(l.url) };
+    // szabásnál a nettó súly a beépülő területből jön, nem a teljes táblákból
+    const kg = !q ? 0 : l.fix && l.netM2 && it.wu === 'm2' && it.w ? l.netM2 * it.w : weightOf(it, q, o.u);
+    return { it, opts, o, r, q, n, net, netPer: r.bill ? net / r.bill : 0, kg, fix: !!l.fix, missing: !byUrl.get(l.url) };
   }
   function totals(p) {
     const m = num(p.margin), vat = num(p.vat || 27), mul = 1 + m / 100;
@@ -448,7 +454,7 @@ td.r, th.r { text-align: right; }
 
   function slotNote(c) {
     if (!c || !c.q) return '';
-    const per = c.n > 1 ? `${c.n} db × ${fmt2.format(c.q / c.n)} = ${fmt2.format(c.q)} ${c.custom ? c.r.billUnit : (c.o.u === 'szál' || c.o.u === 'tábla' || c.o.u === 'kg' ? c.o.u : c.o.u.startsWith('m²') ? 'm²' : 'fm')}` : '';
+    const per = c.fix ? 'szabásból, a teljes rendelésre' : c.n > 1 ? `${c.n} db × ${fmt2.format(c.q / c.n)} = ${fmt2.format(c.q)} ${c.custom ? c.r.billUnit : (c.o.u === 'szál' || c.o.u === 'tábla' || c.o.u === 'kg' ? c.o.u : c.o.u.startsWith('m²') ? 'm²' : 'fm')}` : '';
     // a kg-ban árazott anyagnál a megjegyzés már mutatja a súlyt
     const kg = c.kg != null && c.kg > 0 && !(c.r.note || '').includes('kg') ? `nettó ${fmt2.format(c.kg)} kg` : '';
     return [per, c.r.note, kg].filter(Boolean).join(' · ');
@@ -520,6 +526,11 @@ td.r, th.r { text-align: right; }
       <section class="panel" aria-labelledby="h-mat">
         <h2 id="h-mat">Anyagok alkatrészenként</h2>
         <div class="hint">A mennyiséget egy termékre add meg. A program felszorozza a darabszámmal, és az összes mennyiséget kerekíti egész szálra vagy táblára.</div>
+        <details class="szabas"><summary>Lemez beillesztése a szabás-számításból</summary>
+          <div class="hint">Előbb a Lemez sorban válaszd ki a lemezt (anyag, vastagság). Utána másold ide a szabásprogram eredményét a „Felhasznált lemezek száma” résztől, és kattints a Beolvasás gombra. A táblák száma a teljes rendelésre szól, nem szorzódik a darabszámmal.</div>
+          <textarea id="szabText" placeholder="Felhasznált lemezek száma: 4&#10;  4 db  1000 x 2000 mm&#10;Összes táblaterület: 8.00 m²&#10;Beépülő terület:     7.15 m²"></textarea>
+          <button class="small primary" id="szabBtn">Beolvasás</button>
+        </details>
         ${p.reszek.map((part) => `<div class="part" data-part="${part.id}">
           <div class="part-head"><input type="text" id="pn-${part.id}" data-act="partname" value="${esc(part.nev)}" aria-label="Alkatrész neve">
             <div class="actions"><button class="small" data-act="addslot">+ Anyag</button><button class="small" data-act="addcustom">+ Kézi tétel</button><button class="ghost" data-act="delpart" aria-label="Alkatrész törlése">✕</button></div></div>
@@ -608,6 +619,7 @@ td.r, th.r { text-align: right; }
     $('pDb').addEventListener('input', (e) => { cur.db = e.target.value; touch(); v.querySelectorAll('[data-slot]').forEach((n) => { const f = findSlot(n); if (f.l) refreshSlot(n, f.l); }); refreshTotals(); });
     ['margin', 'vat'].forEach((k) => $(k).addEventListener('input', (e) => { cur[k] = e.target.value; touch(); v.querySelectorAll('[data-slot]').forEach((n) => { const f = findSlot(n); if (f.l && f.l.url) refreshSlot(n, f.l); }); refreshTotals(); }));
 
+    $('szabBtn').addEventListener('click', importSzabas);
     $('copyTable').addEventListener('click', copyTable);
     $('copyTotal').addEventListener('click', copyTotal);
   }
@@ -622,7 +634,7 @@ td.r, th.r { text-align: right; }
       const act = b.dataset.act;
       if (b.dataset.pickurl) {
         const { l } = findSlot(b); const it = byUrl.get(b.dataset.pickurl); if (!l || !it) return;
-        const { _k, ...snap } = it; l.url = it.url; l.snap = snap;
+        const { _k, ...snap } = it; l.url = it.url; l.snap = snap; delete l.fix; delete l.netM2;
         if (!unitOptions(it).some((o) => o.u === l.unit)) l.unit = unitOptions(it)[0].u;
         picker = null; touch(); render();
         setTimeout(() => $('q-' + l.id)?.focus(), 0);
@@ -663,6 +675,36 @@ td.r, th.r { text-align: right; }
     v.addEventListener('keydown', (e) => { if (active() && e.key === 'Escape' && picker) { picker = null; render(); } });
   }
   bindProjectDelegates();
+
+  // ---------- szabás-számítás eredményének beolvasása ----------
+  // Pl. "  4 db  1000 x 2000 mm" sorok és "Beépülő terület: 7.15 m²"
+  function importSzabas() {
+    const txt = $('szabText').value;
+    const sheets = [...txt.matchAll(/(\d+)\s*db\s+(\d+)\s*[x×]\s*(\d+)\s*mm/gi)].map((m) => ({ n: +m[1], w: +m[2], h: +m[3] }));
+    if (!sheets.length) { toast('Nem találtam táblát a szövegben (pl. „4 db 1000 x 2000 mm”).'); return; }
+    const used = (txt.match(/Beépülő terület:\s*([\d.,]+)/i) || [])[1];
+    // a cél: az első Lemez sor, amelyben már ki van választva a lemez
+    let part = null, line = null;
+    for (const r of cur.reszek) { const l = r.sorok.find((x) => x.url && (byUrl.get(x.url) || x.snap)?.c === 'Lemez'); if (l) { part = r; line = l; break; } }
+    if (!line) { toast('Előbb válaszd ki a lemezt (vastagságot) a Lemez sorban, utána olvasd be a szabást.'); return; }
+    const base = byUrl.get(line.url) || line.snap;
+    const t = num((base.m || '').split('x')[0]);
+    const find = (w, h) => DATA.items.find((x) => x.c === base.c && x.s === base.s && (x.g || '') === (base.g || '') && (() => { const n = (x.m || '').split('x').map(num); return n.length >= 3 && n[0] === t && ((n[1] === w && n[2] === h) || (n[1] === h && n[2] === w)); })());
+    const missing = sheets.filter((sh) => !find(sh.w, sh.h));
+    if (missing.length) { toast(`${base.s} ${fmt2.format(t)} mm-ben nincs ilyen tábla az árlistában: ${missing.map((m) => m.w + 'x' + m.h).join(', ')}`); return; }
+    const totalArea = sheets.reduce((a, sh) => a + sh.n * sh.w * sh.h / 1e6, 0);
+    const netAll = used ? num(used) : null;
+    // a korábban beolvasott szabás-sorokat lecseréljük
+    part.sorok = part.sorok.filter((x) => x === line || !x.szabas);
+    sheets.forEach((sh, i) => {
+      const it = find(sh.w, sh.h); const { _k, ...snap } = it;
+      const l = i === 0 ? line : { id: uid(), cimke: line.cimke, kat: line.kat, al: line.al, szabas: true };
+      Object.assign(l, { url: it.url, snap, unit: 'tábla', qty: String(sh.n), fix: true, netM2: netAll ? netAll * (sh.n * sh.w * sh.h / 1e6) / totalArea : null });
+      if (i > 0) part.sorok.splice(part.sorok.indexOf(line) + i, 0, l);
+    });
+    touch(); render();
+    toast(`Beolvasva: ${sheets.map((sh) => sh.n + ' tábla ' + sh.w + 'x' + sh.h).join(', ')}${netAll ? `, beépülő ${fmt2.format(netAll)} m²` : ''}.`);
+  }
 
   // ---------- másolás ----------
   async function copy(html, text) {
