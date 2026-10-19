@@ -1,0 +1,184 @@
+[
+ {
+  "id": "billeno-kontener",
+  "nev": "Billenő konténer",
+  "reszek": [
+   {
+    "anyagok": [
+     {
+      "al": "Hidegen hengerelt vaslemez",
+      "cimke": "Hidegen hengerelt lemez",
+      "id": "lemez",
+      "kat": "Lemez"
+     }
+    ],
+    "id": "test",
+    "nev": "Lemez"
+   },
+   {
+    "anyagok": [
+     {
+      "al": "",
+      "cimke": "Zártszelvény",
+      "id": "zart",
+      "kat": "Zártszelvény"
+     },
+     {
+      "al": "",
+      "cimke": "Laposacél",
+      "id": "lapos",
+      "kat": "Laposacél"
+     }
+    ],
+    "id": "villapapucs",
+    "nev": "Villapapucs"
+   }
+  ]
+ },
+ {
+  "id": "dohanyzo",
+  "nev": "Dohányzó",
+  "reszek": [
+   {
+    "anyagok": [
+     {
+      "al": "",
+      "cimke": "Zártszelvény keresztbe",
+      "id": "teto-kereszt",
+      "kat": "Zártszelvény"
+     },
+     {
+      "al": "",
+      "cimke": "Zártszelvény hosszába",
+      "id": "teto-hossz",
+      "kat": "Zártszelvény"
+     },
+     {
+      "al": "",
+      "cimke": "Trapézlemez",
+      "id": "teto-trapez",
+      "kat": "Trapézlemez (tetolemez.hu)"
+     }
+    ],
+    "id": "teto",
+    "nev": "Tető"
+   },
+   {
+    "anyagok": [
+     {
+      "al": "Polikarbonát lemez",
+      "cimke": "Polikarbonát lemez",
+      "id": "oldal-pc",
+      "kat": "Polikarbonát (metallonova.hu)"
+     },
+     {
+      "al": "",
+      "cimke": "Üveg (ha nem polikarbonát)",
+      "egyseg": "m²",
+      "id": "oldal-uveg",
+      "kat": "Egyedi (kézi ár)"
+     },
+     {
+      "al": "Leszorító",
+      "cimke": "Polikarbonát leszorító",
+      "id": "oldal-leszorito",
+      "kat": "Polikarbonát (metallonova.hu)"
+     },
+     {
+      "al": "Profilgumi",
+      "cimke": "Profilgumi leszorítóhoz",
+      "id": "oldal-gumi",
+      "kat": "Polikarbonát (metallonova.hu)"
+     },
+     {
+      "al": "U profil",
+      "cimke": "Polikarbonát U profil",
+      "id": "oldal-u",
+      "kat": "Polikarbonát (metallonova.hu)"
+     },
+     {
+      "al": "Párazáró",
+      "cimke": "Párazáró",
+      "id": "oldal-parazaro",
+      "kat": "Polikarbonát (metallonova.hu)"
+     },
+     {
+      "al": "Páraáteresztő",
+      "cimke": "Páraáteresztő",
+      "id": "oldal-paraatereszto",
+      "kat": "Polikarbonát (metallonova.hu)"
+     },
+     {
+      "al": "Csavar, alátét",
+      "cimke": "Csavar",
+      "id": "oldal-csavar",
+      "kat": "Polikarbonát (metallonova.hu)"
+     },
+     {
+      "al": "Csavar, alátét",
+      "cimke": "Alátét",
+      "id": "oldal-alatet",
+      "kat": "Polikarbonát (metallonova.hu)"
+     },
+     {
+      "al": "",
+      "cimke": "Anya",
+      "egyseg": "db",
+      "id": "oldal-anya",
+      "kat": "Egyedi (kézi ár)"
+     }
+    ],
+    "id": "oldal",
+    "nev": "Oldalak"
+   },
+   {
+    "anyagok": [
+     {
+      "al": "",
+      "cimke": "Zártszelvény keresztbe",
+      "id": "alj-kereszt",
+      "kat": "Zártszelvény"
+     },
+     {
+      "al": "",
+      "cimke": "Zártszelvény hosszába",
+      "id": "alj-hossz",
+      "kat": "Zártszelvény"
+     },
+     {
+      "al": "Bordás vaslemez",
+      "cimke": "Bordás lemez",
+      "id": "alj-bordas",
+      "kat": "Lemez"
+     }
+    ],
+    "id": "alj",
+    "nev": "Alj"
+   },
+   {
+    "anyagok": [
+     {
+      "al": "",
+      "cimke": "Zártszelvény",
+      "id": "pad-zart",
+      "kat": "Zártszelvény"
+     }
+    ],
+    "id": "pad",
+    "nev": "Pad tartószerkezet"
+   },
+   {
+    "anyagok": [
+     {
+      "al": "",
+      "cimke": "Zártszelvény",
+      "id": "oszlop-zart",
+      "kat": "Zártszelvény"
+     }
+    ],
+    "id": "oszlop",
+    "nev": "Tartóoszlopok"
+   }
+  ]
+ }
+]

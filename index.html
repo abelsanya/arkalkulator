@@ -1,0 +1,764 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Acél árkalkulátor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: egy hasábos munkalap; projektlista -> projekt (alkatrészenként anyagsorok) -> összesítő. Számok tabuláltan, mono betűvel */
+:root {
+  --bg: #eef1f3;
+  --panel: #ffffff;
+  --ink: #1b2329;
+  --muted: #5c6a74;
+  --line: #d3dade;
+  --accent: #1d5e86;
+  --accent-ink: #ffffff;
+  --accent-soft: #e1edf5;
+  --warn: #9a5b00;
+  --warn-soft: #fbf0dc;
+  --danger: #a3302a;
+  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", Roboto, Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12171b; --panel: #1a2126; --ink: #e4e9ec; --muted: #94a3ad; --line: #2e3940;
+    --accent: #6fb3dd; --accent-ink: #0d1a22; --accent-soft: #1d3342; --warn: #e7b25a; --warn-soft: #34291a; --danger: #ec8a84;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12171b; --panel: #1a2126; --ink: #e4e9ec; --muted: #94a3ad; --line: #2e3940;
+  --accent: #6fb3dd; --accent-ink: #0d1a22; --accent-soft: #1d3342; --warn: #e7b25a; --warn-soft: #34291a; --danger: #ec8a84;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 48px;
+}
+.wrap { max-width: 1100px; margin: 0 auto; display: grid; gap: 18px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 20px; }
+h1 { font-family: var(--font-display); font-weight: 800; font-size: 26px; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--font-display); font-weight: 700; font-size: 18px; margin: 0; text-wrap: balance; }
+h3 { font-family: var(--font-display); font-weight: 700; font-size: 15px; margin: 0; }
+.meta { color: var(--muted); font-size: 13px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+label, .lbl { font-size: 12px; color: var(--muted); letter-spacing: 0.03em; text-transform: uppercase; }
+input, select, button, textarea { font: inherit; color: inherit; }
+input[type="text"], input[type="search"], select {
+  background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; width: 100%; min-width: 0;
+}
+input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button { cursor: pointer; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); padding: 7px 12px; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+button.link { border: 0; background: none; color: var(--accent); padding: 2px 0; font-weight: 500; }
+button.ghost { border-color: transparent; background: transparent; color: var(--muted); padding: 4px 8px; }
+button.ghost:hover { color: var(--danger); }
+button.small { font-size: 13px; padding: 4px 10px; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.field { display: grid; gap: 4px; min-width: 0; flex: 1 1 180px; }
+.hint { color: var(--muted); font-size: 13px; }
+.banner { background: var(--warn-soft); color: var(--warn); border-radius: 6px; padding: 8px 10px; font-size: 13px; }
+.toast { color: var(--accent); font-size: 13px; min-height: 1.2em; }
+
+/* projektlista */
+.plist { display: grid; }
+.pitem { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 10px 6px; border: 0; border-bottom: 1px solid var(--line); background: transparent; border-radius: 0; text-align: left; width: 100%; }
+.pitem:hover { background: var(--accent-soft); }
+.pitem .n { font-weight: 600; }
+.pitem .s { color: var(--muted); font-size: 13px; }
+.pitem .t { text-align: right; }
+.tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); margin-left: 6px; font-weight: 500; }
+
+/* projekt */
+.part { border-top: 1px solid var(--line); padding-top: 12px; display: grid; gap: 8px; }
+.part:first-of-type { border-top: 0; padding-top: 0; }
+.part-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.part-head input { font-family: var(--font-display); font-weight: 700; font-size: 15px; background: transparent; border-color: transparent; padding: 4px 6px; max-width: 360px; }
+.part-head input:hover, .part-head input:focus { border-color: var(--line); background: var(--bg); }
+.slot { display: grid; grid-template-columns: 120px minmax(0, 1fr) 250px 120px 34px; gap: 6px 10px; align-items: start; padding: 8px 0; border-bottom: 1px dashed var(--line); }
+.slot:last-child { border-bottom: 0; }
+.slot .cimke { font-weight: 600; font-size: 14px; padding-top: 7px; overflow-wrap: anywhere; }
+.slot .cimke .sub { font-weight: 400; }
+.pick { display: grid; gap: 4px; min-width: 0; }
+.pick-btn { text-align: left; width: 100%; background: var(--bg); overflow-wrap: anywhere; }
+.pick-btn.empty { color: var(--warn); border-style: dashed; border-color: var(--warn); }
+.qty { display: flex; gap: 4px; }
+.qty input { width: 74px; flex: none; text-align: right; font-family: var(--font-mono); }
+.qty select { padding-inline: 6px; }
+.sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.total { text-align: right; padding-top: 7px; }
+.flag { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 4px; background: var(--warn-soft); color: var(--warn); }
+.picker { grid-column: 1 / -1; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px; display: grid; gap: 8px; }
+.picker .results { max-height: 320px; overflow-y: auto; display: grid; }
+.res { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 12px; padding: 7px 6px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; text-align: left; width: 100%; }
+.res:hover, .res:focus-visible { background: var(--accent-soft); }
+.res .s { color: var(--muted); font-size: 12px; }
+.res .p { text-align: right; font-size: 13px; white-space: nowrap; }
+@media (max-width: 760px) {
+  .slot { grid-template-columns: minmax(0, 1fr) auto; }
+  .slot .cimke { grid-column: 1 / -1; padding-top: 0; }
+  .slot .pick { grid-column: 1 / -1; }
+  .slot .qtycell { grid-column: 1; }
+  .slot .total { grid-column: 2; }
+  .slot .del { grid-column: 2; grid-row: 1; justify-self: end; }
+}
+
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; font-weight: 500; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; padding: 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.r, th.r { text-align: right; }
+.svc input[type="text"] { padding: 6px 8px; }
+.svc .w-name { min-width: 140px; }
+.svc .w-num { width: 84px; text-align: right; font-family: var(--font-mono); }
+.svc .w-unit { width: 84px; }
+.presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.settings { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: end; }
+.settings > div { display: grid; gap: 4px; }
+.settings input { width: 90px; text-align: right; font-family: var(--font-mono); }
+.totals { display: grid; gap: 4px; border-top: 2px solid var(--ink); padding-top: 10px; }
+.totals .line { display: flex; justify-content: space-between; gap: 12px; }
+.totals .line.big { font-family: var(--font-display); font-weight: 800; font-size: 20px; padding-top: 6px; }
+.totals .line.muted { color: var(--muted); font-size: 13px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* sablonszerkesztő */
+.tpl { display: grid; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px; }
+.tpl-part { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--line); border-radius: 6px; }
+.tpl-slot { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr) 34px; gap: 6px; align-items: center; }
+@media (max-width: 640px) { .tpl-slot { grid-template-columns: minmax(0, 1fr) 34px; } .tpl-slot > :nth-child(2), .tpl-slot > :nth-child(3) { grid-column: 1; } }
+#copyArea { position: absolute; left: -9999px; }
+@media (prefers-reduced-motion: no-preference) { .res, .pitem { transition: background .12s; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1 id="title">Acél árkalkulátor</h1>
+    <div class="meta" id="meta">Árlista betöltése…</div>
+  </header>
+  <div class="banner" id="localBanner" hidden>A projektek és terméktípusok ebben a böngészőben tárolódnak, más gépen vagy böngészőben nem látszanak.</div>
+  <main id="view"></main>
+  <div class="toast" id="toast" role="status"></div>
+</div>
+<div id="copyArea" aria-hidden="true"></div>
+
+<script>
+(function () {
+  const VAT_BASE = 1.27; // a webáruház bruttó árai 27% ÁFÁ-val
+  const fmt = new Intl.NumberFormat('hu-HU', { maximumFractionDigits: 0 });
+  const fmt2 = new Intl.NumberFormat('hu-HU', { maximumFractionDigits: 2 });
+  const $ = (id) => document.getElementById(id);
+  const ft = (v) => fmt.format(Math.round(v)) + ' Ft';
+  const num = (s) => { const v = parseFloat(String(s ?? '').replace(/\s/g, '').replace(',', '.')); return isFinite(v) ? v : 0; };
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const clone = (o) => JSON.parse(JSON.stringify(o));
+  function toast(msg) { $('toast').textContent = msg; clearTimeout(toast.t); toast.t = setTimeout(() => { $('toast').textContent = ''; }, 4000); }
+
+  // ================= árlista =================
+  let DATA = { date: '', items: [] };
+  const byUrl = new Map();
+  const GROUPS = new Map();
+  let CATS = []; // [{c, subs:[...]}]
+  const norm = (s) => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '').replace(/\./g, ',').replace(/×/g, 'x');
+  const groupKey = (it) => [it.c, it.s, (it.m || '').replace(/\s/g, ''), it.g || ''].join('|');
+
+  function plateArea(it) {
+    if (it.c !== 'Lemez') return null;
+    const n = (it.m || '').split('x').map(num);
+    return n.length >= 3 && n[1] > 100 && n[2] > 100 ? (n[1] * n[2]) / 1e6 : null;
+  }
+  // Egy szál bruttó ára (szálas vagy kg-os, ismert hosszú rúdanyagnál), különben null
+  function barPrice(it) {
+    if (!it.l) return null;
+    if (it.u === 'szál') return it.p;
+    if (it.u === 'kg' && it.kg && it.kgper === 'm') return it.p * it.kg * it.l;
+    return null;
+  }
+  // Egy tábla bruttó ára
+  function sheetPrice(it) {
+    if (it.c !== 'Lemez' || !plateArea(it)) return null;
+    if (it.u === 'kg') return it.kg && it.kgper === 'tabla' ? it.p * it.kg : null;
+    return it.p;
+  }
+  // Ugyanaz a szelvény más szálhosszban is (pl. 6 és 12 fm)
+  function variants(it) { return (GROUPS.get(groupKey(it)) || [it]).filter((v) => barPrice(v)); }
+
+  // A szükséges hosszt egész szálakból fedi le, a legolcsóbb hossz-kombinációval (azonos árnál a kevesebb maradékkal)
+  function bestCombo(need, vs) {
+    vs = vs.slice(0, 3);
+    let best = null;
+    const counts = new Array(vs.length).fill(0);
+    (function rec(i, len, cost) {
+      if (best && cost > best.cost + 1e-6) return;
+      if (len >= need - 1e-9) {
+        if (!best || cost < best.cost - 1e-6 || (Math.abs(cost - best.cost) < 1e-6 && len < best.len)) best = { cost, len, counts: counts.slice() };
+        return;
+      }
+      if (i === vs.length) return;
+      const max = Math.ceil((need - len) / vs[i].l);
+      for (let n = i === vs.length - 1 ? max : 0; n <= max; n++) {
+        counts[i] = n; rec(i + 1, len + n * vs[i].l, cost + n * barPrice(vs[i]));
+      }
+      counts[i] = 0;
+    })(0, 0, 0);
+    best.parts = vs.map((v, i) => ({ l: v.l, n: best.counts[i] })).filter((x) => x.n > 0);
+    return best;
+  }
+  const lenTxt = (l) => fmt2.format(l) + ' m';
+
+  // Mennyiség-megadási módok. calc(q) => bruttó összeg, számlázott mennyiség és egysége, magyarázat
+  function unitOptions(it) {
+    const o = [], p = it.p, bp = barPrice(it), sp = sheetPrice(it), area = plateArea(it);
+    if (bp) {
+      o.push({ u: 'fm', label: 'fm (egész szálra)', calc: (q) => {
+        if (q <= 0) return { gross: 0, bill: 0, billUnit: 'fm', note: '' };
+        const c = bestCombo(q, variants(it));
+        const desc = c.parts.map((x) => `${x.n} × ${lenTxt(x.l)}`).join(' + ');
+        const rest = c.len - q;
+        return { gross: c.cost, bill: c.len, billUnit: 'fm', note: `${desc} szál = ${fmt2.format(c.len)} fm${rest > 0.0005 ? `, maradék ${fmt2.format(rest)} m` : ''}`, wordNote: desc + ' szál' };
+      } });
+      o.push({ u: 'fm-a', label: 'fm (arányos)', calc: (q) => ({ gross: q * bp / it.l, bill: q, billUnit: 'fm', note: `≈ ${fmt2.format(q / it.l)} szál (${lenTxt(it.l)})` }) });
+      o.push({ u: 'szál', label: 'szál', calc: (q) => ({ gross: q * bp, bill: q, billUnit: 'szál', note: `= ${fmt2.format(q * it.l)} fm (${lenTxt(it.l)}-es)` }) });
+    } else if (it.u === 'kg' && it.kg && it.kgper === 'm') {
+      o.push({ u: 'fm', label: 'fm', calc: (q) => ({ gross: q * it.kg * p, bill: q, billUnit: 'fm', note: `≈ ${fmt2.format(q * it.kg)} kg` }) });
+    } else if (it.u === 'fm') {
+      o.push({ u: 'fm', label: 'fm', calc: (q) => ({ gross: q * p, bill: q, billUnit: 'fm', note: '' }) });
+    }
+    if (sp) {
+      o.push({ u: 'tábla', label: 'tábla', calc: (q) => ({ gross: q * sp, bill: q, billUnit: 'tábla', note: it.u === 'kg' ? `≈ ${fmt2.format(q * it.kg)} kg` : '' }) });
+      o.push({ u: 'm²', label: 'm² (egész táblára)', calc: (q) => {
+        const n = q > 0 ? Math.ceil(q / area - 1e-9) : 0;
+        return { gross: n * sp, bill: n, billUnit: 'tábla', note: `${n} tábla = ${fmt2.format(n * area)} m²${n * area - q > 0.0005 ? `, maradék ${fmt2.format(n * area - q)} m²` : ''}`, wordNote: `${fmt2.format(q)} m²-hez` };
+      } });
+      o.push({ u: 'm²-a', label: 'm² (arányos)', calc: (q) => ({ gross: q * sp / area, bill: q, billUnit: 'm²', note: `≈ ${fmt2.format(q / area)} tábla` }) });
+    }
+    if (it.u === 'kg') o.push({ u: 'kg', label: 'kg', calc: (q) => ({ gross: q * p, bill: q, billUnit: 'kg', note: '' }) });
+    if (!o.length) o.push({ u: it.u, label: it.u, calc: (q) => ({ gross: q * p, bill: q, billUnit: it.u, note: '' }) });
+    return o;
+  }
+  function priceLabel(it) {
+    const sp = sheetPrice(it), bp = barPrice(it);
+    if (sp) return ft(sp / VAT_BASE) + ' / tábla';
+    if (bp) return ft(bp / VAT_BASE / it.l) + ' / fm';
+    return ft(it.p / VAT_BASE) + ' / ' + it.u;
+  }
+
+  function searchItems(q, kat, al) {
+    const toks = q.trim().split(/\s+/).filter(Boolean).map(norm);
+    const alN = al ? norm(al) : '';
+    let res = DATA.items.filter((it) => (!kat || it.c === kat) && (!alN || norm(it.s).includes(alN)) && toks.every((t) => it._k.includes(t)));
+    // a méret pontos egyezése előre kerül; a "2" és a "2,0" ugyanaz
+    const z = (s) => s.replace(/,0+(?=x|$)/g, '');
+    const score = (it) => { const m = z(norm(it.m || '').replace(/^[øhb]=?/, '')); return toks.reduce((a, t) => { t = z(t); return a + (m === t ? 3 : m.startsWith(t + 'x') || m.startsWith(t + ',') ? 1 : 0); }, 0); };
+    if (toks.length) res = res.map((it, i) => [score(it), i, it]).sort((a, b) => b[0] - a[0] || a[1] - b[1]).map((x) => x[2]);
+    return res;
+  }
+
+  // ================= tárolás (közös db, vagy helyi tartalék) =================
+  const Store = {
+    db: null,
+    tpls: [], projs: [],
+    onChange: () => {},
+    async init() {
+      try { this.db = window.claude ? await window.claude.use('db') : null; } catch (e) { this.db = null; }
+      if (this.db) {
+        this.db.collection('termektipusok').onSnapshot((s) => { this.tpls = s.docs.map((d) => ({ id: d.id, ...clone(d.data()) })); this.onChange('tpl'); }, () => {});
+        this.db.collection('projektek').orderBy('modositva', 'desc').limit(500).onSnapshot((s) => {
+          this.projs = s.docs.map((d) => ({ id: d.id, ...clone(d.data()), _pending: d.metadata.hasPendingWrites })); this.onChange('proj');
+        }, () => {});
+      } else {
+        $('localBanner').hidden = false;
+        this.tpls = this._lget('tpl'); this.projs = this._lget('proj');
+        if (!this.tpls.length) {
+          // első indítás: alap terméktípusok betöltése
+          try { const r = await fetch('termektipusok.json'); if (r.ok) { this.tpls = await r.json(); this._lset('tpl', this.tpls); } } catch (e) {}
+        }
+        this.onChange('tpl'); this.onChange('proj');
+      }
+    },
+    _lget(k) { try { return JSON.parse(localStorage.getItem('acelkalk-' + k)) || []; } catch (e) { return []; } },
+    _lset(k, v) { try { localStorage.setItem('acelkalk-' + k, JSON.stringify(v)); } catch (e) {} },
+    async save(kind, obj) {
+      const { id, _pending, ...body } = obj;
+      if (this.db) {
+        try { await this.db.collection(kind === 'tpl' ? 'termektipusok' : 'projektek').doc(id).set(body); }
+        catch (e) { toast(e && e.code === 'quota_exceeded' ? 'Betelt a tárhely, törölj régi projekteket.' : 'Nem sikerült menteni. Lehet, hogy csak olvasási jogod van.'); throw e; }
+      } else {
+        const list = kind === 'tpl' ? this.tpls : this.projs;
+        const i = list.findIndex((x) => x.id === id); if (i >= 0) list[i] = clone(obj); else list.unshift(clone(obj));
+        if (kind === 'proj') list.sort((a, b) => String(b.modositva).localeCompare(String(a.modositva)));
+        this._lset(kind, list); this.onChange(kind);
+      }
+    },
+    async remove(kind, id) {
+      if (this.db) { await this.db.collection(kind === 'tpl' ? 'termektipusok' : 'projektek').doc(id).delete(); }
+      else { const k = kind === 'tpl' ? 'tpls' : 'projs'; this[k] = this[k].filter((x) => x.id !== id); this._lset(kind, this[k]); this.onChange(kind); }
+    },
+  };
+
+  // ================= állapot és nézetek =================
+  let route = { view: 'home' }; // home | project(id) | templates
+  let cur = null;          // a nyitott projekt munkapéldánya
+  let saveTimer = null;
+  let picker = null;       // {partId, slotId, q}
+  let homeQ = '';
+
+  function go(r) {
+    if (saveTimer) flushSave();
+    route = r; picker = null;
+    if (r.view === 'project') { const p = Store.projs.find((x) => x.id === r.id); cur = p ? clone(p) : null; }
+    try { location.hash = r.view === 'project' ? 'p' : ''; } catch (e) {}
+    render(); window.scrollTo(0, 0);
+  }
+  Store.onChange = (kind) => {
+    if (route.view === 'project' && kind === 'proj' && cur) {
+      // más kolléga módosítása: csak akkor vesszük át, ha nálunk nincs mentetlen változás és épp nem gépelünk
+      const p = Store.projs.find((x) => x.id === cur.id);
+      if (p && !p._pending && !saveTimer && p.modositva !== cur.modositva && !$('view').contains(document.activeElement)) { cur = clone(p); render(); }
+      return;
+    }
+    if (route.view === 'templates' && kind === 'tpl' && $('view').contains(document.activeElement)) return;
+    render();
+  };
+
+  function touch() {
+    cur.modositva = new Date().toISOString();
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(flushSave, 700);
+  }
+  function flushSave() {
+    clearTimeout(saveTimer); saveTimer = null;
+    if (cur) Store.save('proj', cur).catch(() => {});
+  }
+
+  function render() {
+    if (!DATA.items.length) return;
+    if (route.view === 'project' && cur) renderProject();
+    else if (route.view === 'templates') renderTemplates();
+    else renderHome();
+  }
+
+  // ---------- kezdőlap ----------
+  function renderHome() {
+    $('title').textContent = 'Acél árkalkulátor';
+    const tpls = Store.tpls.slice().sort((a, b) => a.nev.localeCompare(b.nev, 'hu'));
+    const q = norm(homeQ);
+    const projs = Store.projs.filter((p) => !q || norm(p.nev + ' ' + (p.termekNev || '') + ' ' + (p.leiras || '')).includes(q));
+    $('view').innerHTML = `
+      <div style="display:grid;gap:18px">
+      <section class="panel" aria-labelledby="h-new">
+        <h2 id="h-new">Új projekt</h2>
+        ${tpls.length ? '' : '<div class="hint">Még nincs terméktípus. Előbb hozz létre egyet a „Terméktípusok szerkesztése” gombbal.</div>'}
+        <form class="row" id="newForm">
+          <div class="field"><label for="nTpl">Termék</label><select id="nTpl">${tpls.map((t) => `<option value="${t.id}">${esc(t.nev)}</option>`).join('')}<option value="">Üres (alkatrészek nélkül)</option></select></div>
+          <div class="field"><label for="nName">Projekt neve</label><input type="text" id="nName" placeholder="pl. ABO_A" required></div>
+          <div class="field"><label for="nDesc">Leírás (nem kötelező)</label><input type="text" id="nDesc" placeholder="pl. Kónusz"></div>
+          <button class="primary" type="submit">Projekt létrehozása</button>
+        </form>
+        <div><button class="link" id="toTpl">Terméktípusok szerkesztése</button></div>
+      </section>
+      <section class="panel" aria-labelledby="h-list">
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <h2 id="h-list">Projektek</h2>
+          <input type="search" id="homeQ" placeholder="Keresés projektnévre" value="${esc(homeQ)}" style="max-width:260px">
+        </div>
+        <div class="plist">${projs.length ? projs.map((p) => {
+          const t = totals(p);
+          return `<button class="pitem" data-open="${p.id}"><span class="n">${esc(p.nev)}${p.termekNev ? `<span class="tag">${esc(p.termekNev)}</span>` : ''}</span><span class="t num">${ft(t.net)}</span>
+            <span class="s">${esc(p.leiras || '')}${p.leiras ? ' · ' : ''}módosítva: ${esc(fmtDate(p.modositva))}</span><span class="s" style="text-align:right">nettó</span></button>`;
+        }).join('') : `<div class="hint">${Store.projs.length ? 'Nincs ilyen nevű projekt.' : 'Még nincs projekt. Fent adj nevet az elsőnek, például ABO_A.'}</div>`}</div>
+      </section>
+      </div>`;
+    $('newForm').addEventListener('submit', (e) => { e.preventDefault(); createProject(); });
+    $('toTpl').addEventListener('click', () => go({ view: 'templates' }));
+    $('homeQ').addEventListener('input', (e) => { homeQ = e.target.value; const pos = e.target.selectionStart; renderHome(); const el = $('homeQ'); el.focus(); el.setSelectionRange(pos, pos); });
+    $('view').querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => go({ view: 'project', id: b.dataset.open })));
+  }
+  function fmtDate(iso) { if (!iso) return ''; const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString('hu-HU', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }); }
+
+  function partsFromTemplate(t) {
+    return (t ? t.reszek || [] : []).map((r) => ({ id: uid(), nev: r.nev, sorok: (r.anyagok || []).map((a) => ({ id: uid(), cimke: a.cimke, kat: a.kat || '', al: a.al || '', url: null, snap: null, qty: '', unit: a.kat === EGYEDI ? (a.egyseg || 'db') : '', name: '', price: '' })) }));
+  }
+  async function createProject() {
+    const nev = $('nName').value.trim(); if (!nev) return;
+    const t = Store.tpls.find((x) => x.id === $('nTpl').value);
+    const p = { id: uid(), nev, leiras: $('nDesc').value.trim(), termekId: t ? t.id : '', termekNev: t ? t.nev : '', reszek: partsFromTemplate(t),
+      szolg: [], margin: '0', vat: '27', letrehozva: new Date().toISOString(), modositva: new Date().toISOString() };
+    if (!p.reszek.length) p.reszek.push({ id: uid(), nev: 'Anyagok', sorok: [] });
+    try { await Store.save('proj', p); } catch (e) { return; }
+    cur = clone(p); route = { view: 'project', id: p.id }; render();
+  }
+
+  // ---------- projekt ----------
+  const EGYEDI = 'Egyedi (kézi ár)';
+  function lineCalc(l) {
+    if (l.kat === EGYEDI) {
+      // árlistában nem szereplő anyag: nettó egységár kézzel
+      const q = num(l.qty), price = num(l.price);
+      return { custom: true, it: { n: l.name || l.cimke || 'Egyedi tétel' }, opts: [], r: { bill: q, billUnit: l.unit || 'db', note: '' }, net: q * price, netPer: price };
+    }
+    if (!l.url) return null;
+    const it = byUrl.get(l.url) || l.snap; if (!it) return null;
+    const opts = unitOptions(it);
+    const o = opts.find((x) => x.u === l.unit) || opts[0];
+    const r = o.calc(num(l.qty));
+    const net = r.gross / VAT_BASE;
+    return { it, opts, o, r, net, netPer: r.bill ? net / r.bill : 0, missing: !byUrl.get(l.url) };
+  }
+  function totals(p) {
+    const m = num(p.margin), vat = num(p.vat || 27), mul = 1 + m / 100;
+    let matCost = 0;
+    (p.reszek || []).forEach((r) => r.sorok.forEach((l) => { const c = lineCalc(l); if (c) matCost += c.net; }));
+    const mat = matCost * mul;
+    const svc = (p.szolg || []).reduce((a, s) => a + num(s.qty) * num(s.price), 0);
+    const net = mat + svc;
+    return { matCost, mat, svc, net, vatAmt: net * vat / 100, gross: net * (1 + vat / 100), m, vat, mul };
+  }
+
+  function slotHTML(part, l) {
+    const c = lineCalc(l), mul = 1 + num(cur.margin) / 100;
+    const filt = [l.kat, l.al].filter(Boolean).join(' · ');
+    const open = picker && picker.slotId === l.id;
+    if (c && c.custom) return `<div class="slot" data-part="${part.id}" data-slot="${l.id}">
+      <div class="cimke">${esc(l.cimke || 'Egyedi tétel')}<div class="sub">kézi ár</div></div>
+      <div class="pick">
+        <input type="text" id="cn-${l.id}" data-act="cname" value="${esc(l.name || '')}" placeholder="Megnevezés, pl. Polikarbonát 10 mm" aria-label="Megnevezés">
+        <div class="qty"><input type="text" inputmode="decimal" id="cp-${l.id}" data-act="cprice" value="${esc(l.price || '')}" placeholder="0" aria-label="Nettó egységár" style="width:110px"><span class="sub" style="padding-top:8px">Ft nettó beszerzési ár / egység</span></div>
+      </div>
+      <div class="qtycell"><div class="qty"><input type="text" inputmode="decimal" id="q-${l.id}" data-act="qty" value="${esc(l.qty)}" placeholder="0" aria-label="Mennyiség">
+        <input type="text" id="cu-${l.id}" data-act="cunit" value="${esc(l.unit || '')}" placeholder="m²" aria-label="Egység"></div><div class="sub num" data-note></div></div>
+      <div class="total num" data-total>${ft(c.net * mul)}</div>
+      <div class="del"><button class="ghost" data-act="del" aria-label="Sor törlése">✕</button></div>
+    </div>`;
+    return `<div class="slot" data-part="${part.id}" data-slot="${l.id}">
+      <div class="cimke">${l.cimke ? esc(l.cimke) : '<span class="sub">Anyag</span>'}${filt && l.cimke !== l.kat ? `<div class="sub">${esc(filt)}</div>` : ''}</div>
+      <div class="pick">
+        <button class="pick-btn ${c ? '' : 'empty'}" data-act="pick" aria-expanded="${open}">${c ? esc(c.it.n) : 'Válaszd ki a méretet…'}</button>
+        ${c ? `<div class="sub num">${esc(priceLabel(c.it))} nettó${c.it.g ? ' · ' + esc(c.it.g) : ''}</div>` : ''}
+        ${c && c.missing ? '<span class="flag">Már nincs az árlistában, a régi ár szerepel</span>' : ''}
+      </div>
+      <div class="qtycell">${c ? `<div class="qty"><input type="text" inputmode="decimal" id="q-${l.id}" data-act="qty" value="${esc(l.qty)}" placeholder="0" aria-label="Mennyiség">
+          <select id="u-${l.id}" data-act="unit" aria-label="Egység">${c.opts.map((o) => `<option value="${o.u}" ${o.u === c.o.u ? 'selected' : ''}>${esc(o.label)}</option>`).join('')}</select></div>
+          <div class="sub num" data-note>${esc(c.r.note || '')}</div>` : ''}</div>
+      <div class="total num" data-total>${c ? ft(c.net * mul) : ''}${c && c.r.bill ? `<div class="sub">${ft(c.netPer * mul)}/${esc(c.r.billUnit)}</div>` : ''}</div>
+      <div class="del"><button class="ghost" data-act="del" aria-label="Sor törlése">✕</button></div>
+      ${open ? pickerHTML(l) : ''}
+    </div>`;
+  }
+  function pickerHTML(l) {
+    const kat = picker.kat ?? l.kat, al = picker.al ?? l.al;
+    const res = searchItems(picker.q || '', kat, al);
+    const shown = res.slice(0, 1000);
+    return `<div class="picker">
+      <div class="row">
+        <div class="field" style="flex:2 1 220px"><label for="pq">Méret keresése</label><input type="search" id="pq" value="${esc(picker.q || '')}" placeholder="pl. 40x40x2 vagy 2,0" autocomplete="off"></div>
+        <div class="field"><label for="pk">Kategória</label><select id="pk"><option value="">Mind</option>${CATS.map((c) => `<option ${c.c === kat ? 'selected' : ''}>${esc(c.c)}</option>`).join('')}</select></div>
+        ${kat ? `<div class="field"><label for="pa">Alkategória</label><select id="pa"><option value="">Mind</option>${(CATS.find((c) => c.c === kat)?.subs || []).map((s) => `<option ${norm(s) === norm(al || '') ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></div>` : ''}
+        <button class="small" data-act="closepick">Bezár</button>
+      </div>
+      <div class="hint">${res.length ? `${fmt.format(res.length)} találat · nettó árak${res.length > 30 ? ' · görgess, vagy írd be a méretet, pl. 100x50' : ''}` : 'Nincs találat ebben a kategóriában.'}</div>
+      <div class="results">${shown.map((it) => `<button class="res" data-pickurl="${esc(it.url)}"><span>${esc(it.n)}</span><span class="p num">${esc(priceLabel(it))}</span><span class="s">${esc(it.s)} · ${esc(it.src || 'timarvasker.hu')}</span></button>`).join('')}</div>
+    </div>`;
+  }
+
+  function renderProject() {
+    const p = cur;
+    $('title').textContent = p.nev;
+    const t = totals(p);
+    $('view').innerHTML = `
+      <div style="display:grid;gap:18px">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <button class="link" id="back">← Projektek</button>
+        <div class="actions"><button class="small" id="dup">Másolat új projektként</button><button class="small" id="delProj">Projekt törlése</button></div>
+      </div>
+      <section class="panel">
+        <div class="row">
+          <div class="field"><label for="pName">Projekt neve</label><input type="text" id="pName" data-pf="nev" value="${esc(p.nev)}"></div>
+          <div class="field"><label for="pDesc">Leírás</label><input type="text" id="pDesc" data-pf="leiras" value="${esc(p.leiras || '')}" placeholder="pl. Kónusz"></div>
+          <div class="field" style="flex:0 1 200px"><span class="lbl">Termék</span><div style="padding-top:6px;font-weight:600">${esc(p.termekNev || 'Egyedi')}</div></div>
+        </div>
+      </section>
+      <section class="panel" aria-labelledby="h-mat">
+        <h2 id="h-mat">Anyagok alkatrészenként</h2>
+        ${p.reszek.map((part) => `<div class="part" data-part="${part.id}">
+          <div class="part-head"><input type="text" id="pn-${part.id}" data-act="partname" value="${esc(part.nev)}" aria-label="Alkatrész neve">
+            <div class="actions"><button class="small" data-act="addslot">+ Anyag</button><button class="small" data-act="addcustom">+ Kézi tétel</button><button class="ghost" data-act="delpart" aria-label="Alkatrész törlése">✕</button></div></div>
+          ${part.sorok.length ? part.sorok.map((l) => slotHTML(part, l)).join('') : '<div class="hint">Nincs anyag ebben az alkatrészben.</div>'}
+        </div>`).join('')}
+        <div><button class="small" id="addPart">+ Új alkatrész</button></div>
+      </section>
+      <section class="panel" aria-labelledby="h-svc">
+        <h2 id="h-svc">Munkadíj és szolgáltatások</h2>
+        <div class="presets" id="presets">${PRESETS.map((x) => `<button class="small" data-p="${x[0]}" data-u="${x[1]}">+ ${x[0]}</button>`).join('')}</div>
+        ${p.szolg.length ? `<div class="tablewrap"><table class="svc"><thead><tr><th>Megnevezés</th><th class="r">Mennyiség</th><th>Egység</th><th class="r">Nettó egységár</th><th class="r">Nettó</th><th></th></tr></thead><tbody id="svcs">
+          ${p.szolg.map((s) => `<tr data-sid="${s.id}">
+            <td><input type="text" class="w-name" id="sn-${s.id}" data-sf="name" value="${esc(s.name)}" aria-label="Megnevezés"></td>
+            <td class="r"><input type="text" class="w-num" id="sq-${s.id}" data-sf="qty" inputmode="decimal" value="${esc(s.qty)}" aria-label="Mennyiség"></td>
+            <td><input type="text" class="w-unit" id="su-${s.id}" data-sf="unit" value="${esc(s.unit)}" aria-label="Egység"></td>
+            <td class="r"><input type="text" class="w-num" id="sp-${s.id}" data-sf="price" inputmode="decimal" value="${esc(s.price)}" aria-label="Nettó egységár"></td>
+            <td class="r num" data-stotal>${ft(num(s.qty) * num(s.price))}</td>
+            <td><button class="ghost" data-sdel="${s.id}" aria-label="Sor törlése">✕</button></td></tr>`).join('')}
+        </tbody></table></div>` : '<div class="hint">Nincs még munkadíj vagy szolgáltatás.</div>'}
+      </section>
+      <section class="panel" aria-labelledby="h-sum">
+        <h2 id="h-sum">Összesítő</h2>
+        <div class="settings">
+          <div><label for="margin">Árrés az anyagra (%)</label><input type="text" id="margin" inputmode="decimal" value="${esc(p.margin)}"></div>
+          <div><label for="vat">ÁFA (%)</label><input type="text" id="vat" inputmode="decimal" value="${esc(p.vat)}"></div>
+        </div>
+        <div class="totals" id="totals">${totalsHTML(t)}</div>
+        <div class="actions">
+          <button class="primary" id="copyTable">Táblázat másolása Wordbe</button>
+          <button id="copyTotal">Csak a végösszeg másolása</button>
+        </div>
+        <div class="hint">Az árak a Timár Vasker, a tetolemez.hu és a metallonova.hu webáruház bruttó árai, a nettó ár ezekből számolt (÷ 1,27). A kg-os anyagok átváltása elméleti tömeggel (7,85 kg/dm³) történik.</div>
+      </section>
+      </div>`;
+    bindProject();
+    if (picker) { const el = $('pq'); if (el) { el.focus(); const v = el.value; el.setSelectionRange(v.length, v.length); } }
+  }
+  function totalsHTML(t) {
+    return `<div class="line muted"><span>Anyag beszerzési ára (nettó)</span><span class="num">${ft(t.matCost)}</span></div>
+      <div class="line"><span>Anyag (nettó, ${fmt2.format(t.m)}% árréssel)</span><span class="num">${ft(t.mat)}</span></div>
+      <div class="line"><span>Munkadíj és szolgáltatások (nettó)</span><span class="num">${ft(t.svc)}</span></div>
+      <div class="line"><span>Nettó összesen</span><span class="num">${ft(t.net)}</span></div>
+      <div class="line"><span>ÁFA ${fmt2.format(t.vat)}%</span><span class="num">${ft(t.vatAmt)}</span></div>
+      <div class="line big"><span>Bruttó összesen</span><span class="num">${ft(t.gross)}</span></div>`;
+  }
+  const PRESETS = [['Munkadíj', 'óra'], ['Vágás', 'vágás'], ['Hegesztés', 'óra'], ['Festés', 'm²'], ['Szállítás', 'alkalom'], ['Egyéb', 'db']];
+
+  function findSlot(el) {
+    const s = el.closest('[data-slot]'); if (!s) return {};
+    const part = cur.reszek.find((r) => r.id === s.dataset.part);
+    return { part, l: part && part.sorok.find((x) => x.id === s.dataset.slot), node: s };
+  }
+  function refreshSlot(node, l) {
+    const c = lineCalc(l), mul = 1 + num(cur.margin) / 100; if (!c) return;
+    node.querySelector('[data-note]').textContent = c.r.note || '';
+    if (c.custom) { node.querySelector('[data-total]').textContent = ft(c.net * mul); return; }
+    node.querySelector('[data-total]').innerHTML = `${ft(c.net * mul)}${c.r.bill ? `<div class="sub">${ft(c.netPer * mul)}/${esc(c.r.billUnit)}</div>` : ''}`;
+  }
+  function refreshTotals() { const el = $('totals'); if (el) el.innerHTML = totalsHTML(totals(cur)); }
+
+  function bindProject() {
+    const v = $('view');
+    $('back').addEventListener('click', () => go({ view: 'home' }));
+    $('dup').addEventListener('click', async () => {
+      const p = clone(cur); p.id = uid(); p.nev = cur.nev + ' másolat'; p.letrehozva = p.modositva = new Date().toISOString();
+      try { await Store.save('proj', p); } catch (e) { return; }
+      go({ view: 'project', id: p.id }); toast('Másolat elkészült, nevezd át.'); $('pName')?.focus();
+    });
+    let delArm = false;
+    $('delProj').addEventListener('click', async (e) => {
+      if (!delArm) { delArm = true; e.target.textContent = 'Biztosan törlöd? Kattints újra'; setTimeout(() => { delArm = false; if (e.target.isConnected) e.target.textContent = 'Projekt törlése'; }, 4000); return; }
+      const id = cur.id; clearTimeout(saveTimer); saveTimer = null; cur = null;
+      try { await Store.remove('proj', id); } catch (err) { toast('Nem sikerült törölni.'); }
+      go({ view: 'home' }); toast('Projekt törölve.');
+    });
+    v.querySelectorAll('[data-pf]').forEach((el) => el.addEventListener('input', () => { cur[el.dataset.pf] = el.value; if (el.dataset.pf === 'nev') $('title').textContent = el.value; touch(); }));
+    $('addPart').addEventListener('click', () => { cur.reszek.push({ id: uid(), nev: 'Új alkatrész', sorok: [] }); touch(); render(); });
+    ['margin', 'vat'].forEach((k) => $(k).addEventListener('input', (e) => { cur[k] = e.target.value; touch(); v.querySelectorAll('[data-slot]').forEach((n) => { const f = findSlot(n); if (f.l && f.l.url) refreshSlot(n, f.l); }); refreshTotals(); }));
+
+    $('copyTable').addEventListener('click', copyTable);
+    $('copyTotal').addEventListener('click', copyTotal);
+  }
+
+  // A projektnézet delegált eseménykezelői: egyszer kötjük be, a nézet újrarajzolása után is élnek
+  function bindProjectDelegates() {
+    const v = $('view');
+    const active = () => route.view === 'project' && cur;
+    v.addEventListener('click', (e) => {
+      if (!active()) return;
+      const b = e.target.closest('button'); if (!b) return;
+      const act = b.dataset.act;
+      if (b.dataset.pickurl) {
+        const { l } = findSlot(b); const it = byUrl.get(b.dataset.pickurl); if (!l || !it) return;
+        const { _k, ...snap } = it; l.url = it.url; l.snap = snap;
+        if (!unitOptions(it).some((o) => o.u === l.unit)) l.unit = unitOptions(it)[0].u;
+        picker = null; touch(); render();
+        setTimeout(() => $('q-' + l.id)?.focus(), 0);
+        return;
+      }
+      if (b.dataset.p) { cur.szolg.push({ id: uid(), name: b.dataset.p === 'Egyéb' ? '' : b.dataset.p, qty: '1', unit: b.dataset.u, price: '' }); touch(); render(); const s = cur.szolg[cur.szolg.length - 1]; $(b.dataset.p === 'Egyéb' ? 'sn-' + s.id : 'sp-' + s.id)?.focus(); return; }
+      if (b.dataset.sdel) { cur.szolg = cur.szolg.filter((x) => x.id !== b.dataset.sdel); touch(); render(); return; }
+      if (act === 'pick') { const { l } = findSlot(b); picker = picker && picker.slotId === l.id ? null : { slotId: l.id, q: '' }; render(); return; }
+      if (act === 'closepick') { picker = null; render(); return; }
+      if (act === 'del') { const { part, l } = findSlot(b); part.sorok = part.sorok.filter((x) => x.id !== l.id); touch(); render(); return; }
+      const partEl = b.closest('.part'); const part = partEl && cur.reszek.find((r) => r.id === partEl.dataset.part);
+      if (act === 'addslot' && part) { const l = { id: uid(), cimke: '', kat: '', al: '', url: null, snap: null, qty: '', unit: '' }; part.sorok.push(l); picker = { slotId: l.id, q: '' }; touch(); render(); return; }
+      if (act === 'addcustom' && part) { const l = { id: uid(), cimke: 'Egyedi tétel', kat: EGYEDI, al: '', url: null, snap: null, qty: '', unit: 'db', name: '', price: '' }; part.sorok.push(l); touch(); render(); setTimeout(() => $('cn-' + l.id)?.focus(), 0); return; }
+      if (act === 'delpart' && part) {
+        if (part.sorok.some((l) => l.url) && b.dataset.arm !== '1') { b.dataset.arm = '1'; b.textContent = 'Törlöd?'; setTimeout(() => { if (b.isConnected) { b.dataset.arm = ''; b.textContent = '✕'; } }, 4000); return; }
+        cur.reszek = cur.reszek.filter((r) => r.id !== part.id); touch(); render(); return;
+      }
+    });
+    v.addEventListener('input', (e) => {
+      if (!active()) return;
+      const el = e.target;
+      if (el.id === 'pq') { picker.q = el.value; const pos = el.selectionStart; render(); const n = $('pq'); n.focus(); n.setSelectionRange(pos, pos); return; }
+      if (['cname', 'cunit', 'cprice'].includes(el.dataset.act)) { const { l, node } = findSlot(el); l[{ cname: 'name', cunit: 'unit', cprice: 'price' }[el.dataset.act]] = el.value; touch(); refreshSlot(node, l); refreshTotals(); return; }
+      if (el.dataset.act === 'qty') { const { l, node } = findSlot(el); l.qty = el.value; touch(); refreshSlot(node, l); refreshTotals(); return; }
+      if (el.dataset.act === 'partname') { const part = cur.reszek.find((r) => r.id === el.closest('.part').dataset.part); part.nev = el.value; touch(); return; }
+      if (el.dataset.sf) {
+        const tr = el.closest('tr'); const s = cur.szolg.find((x) => x.id === tr.dataset.sid); s[el.dataset.sf] = el.value; touch();
+        tr.querySelector('[data-stotal]').textContent = ft(num(s.qty) * num(s.price)); refreshTotals();
+      }
+    });
+    v.addEventListener('change', (e) => {
+      if (!active()) return;
+      const el = e.target;
+      if (el.dataset.act === 'unit') { const { l } = findSlot(el); l.unit = el.value; touch(); render(); return; }
+      if (el.id === 'pk') { picker.kat = el.value; picker.al = ''; render(); return; }
+      if (el.id === 'pa') { picker.al = el.value; render(); return; }
+    });
+    v.addEventListener('keydown', (e) => { if (active() && e.key === 'Escape' && picker) { picker = null; render(); } });
+  }
+  bindProjectDelegates();
+
+  // ---------- másolás ----------
+  async function copy(html, text) {
+    const done = 'Kimásolva. Wordben Ctrl+V-vel illeszd be.';
+    try {
+      if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+        await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([text], { type: 'text/plain' }) })]);
+      } else { await navigator.clipboard.writeText(text); }
+      toast(done);
+    } catch (e) {
+      const area = $('copyArea'); area.innerHTML = html;
+      const r = document.createRange(); r.selectNodeContents(area);
+      const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      let ok = false; try { ok = document.execCommand('copy'); } catch (e2) {}
+      toast(ok ? done : 'A másolás itt nem engedélyezett. Jelöld ki a táblázatot és másold kézzel.');
+    }
+  }
+  function copyTable() {
+    flushSave();
+    const t = totals(cur);
+    const td = 'style="border:1px solid #999;padding:4px 6px"', tdr = 'style="border:1px solid #999;padding:4px 6px;text-align:right"';
+    const hrows = [], trows = [];
+    cur.reszek.forEach((part) => {
+      const ls = part.sorok.map((l) => [l, lineCalc(l)]).filter(([, c]) => c && c.r.bill);
+      if (!ls.length) return;
+      hrows.push(`<tr><td ${td} colspan="4"><b>${esc(part.nev)}</b></td></tr>`); trows.push(part.nev);
+      ls.forEach(([l, c]) => {
+        const r = [c.it.n, fmt2.format(c.r.bill) + ' ' + c.r.billUnit + (c.r.wordNote ? ` (${c.r.wordNote})` : ''), ft(c.netPer * t.mul), ft(c.net * t.mul)];
+        hrows.push(`<tr><td ${td}>${esc(r[0])}</td><td ${td}>${esc(r[1])}</td><td ${tdr}>${r[2]}</td><td ${tdr}>${r[3]}</td></tr>`); trows.push(r.join('\t'));
+      });
+    });
+    const svcs = cur.szolg.filter((s) => s.name || num(s.price));
+    if (svcs.length) {
+      hrows.push(`<tr><td ${td} colspan="4"><b>Munkadíj és szolgáltatások</b></td></tr>`); trows.push('Munkadíj és szolgáltatások');
+      svcs.forEach((s) => { const r = [s.name, fmt2.format(num(s.qty)) + ' ' + s.unit, ft(num(s.price)), ft(num(s.qty) * num(s.price))]; hrows.push(`<tr><td ${td}>${esc(r[0])}</td><td ${td}>${esc(r[1])}</td><td ${tdr}>${r[2]}</td><td ${tdr}>${r[3]}</td></tr>`); trows.push(r.join('\t')); });
+    }
+    const foot = [['Nettó összesen', ft(t.net)], [`ÁFA ${fmt2.format(t.vat)}%`, ft(t.vatAmt)], ['Bruttó összesen', ft(t.gross)]];
+    const html = `<table style="border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:11pt">
+      <tr><th ${td}>Megnevezés</th><th ${td}>Mennyiség</th><th ${tdr}>Nettó egységár</th><th ${tdr}>Nettó összeg</th></tr>
+      ${hrows.join('')}
+      ${foot.map((f, i) => `<tr><td ${td} colspan="3">${i === 2 ? '<b>' + f[0] + '</b>' : f[0]}</td><td ${tdr}>${i === 2 ? '<b>' + f[1] + '</b>' : f[1]}</td></tr>`).join('')}
+    </table>`;
+    const text = ['Megnevezés\tMennyiség\tNettó egységár\tNettó összeg', ...trows, ...foot.map((f) => f[0] + '\t\t\t' + f[1])].join('\n');
+    copy(html, text);
+  }
+  function copyTotal() {
+    const t = totals(cur);
+    const text = `Nettó: ${ft(t.net)}, ÁFA ${fmt2.format(t.vat)}%: ${ft(t.vatAmt)}, bruttó: ${ft(t.gross)}`;
+    copy(`<span>${esc(text)}</span>`, text);
+  }
+
+  // ---------- terméktípusok ----------
+  let tplEdit = null; // szerkesztett sablon munkapéldánya
+  function renderTemplates() {
+    $('title').textContent = 'Terméktípusok';
+    const tpls = Store.tpls.slice().sort((a, b) => a.nev.localeCompare(b.nev, 'hu'));
+    const catOpts = (sel) => `<option value="">Bármilyen anyag</option>${CATS.map((c) => `<option ${c.c === sel ? 'selected' : ''}>${esc(c.c)}</option>`).join('')}<option ${sel === EGYEDI ? 'selected' : ''}>${EGYEDI}</option>`;
+    const subOpts = (kat, sel) => `<option value="">Mind</option>${(CATS.find((c) => c.c === kat)?.subs || []).map((s) => `<option ${s === sel ? 'selected' : ''}>${esc(s)}</option>`).join('')}`;
+    $('view').innerHTML = `
+      <div style="display:grid;gap:18px">
+      <div><button class="link" id="back">← Projektek</button></div>
+      <section class="panel">
+        <h2>Terméktípusok</h2>
+        <div class="hint">Egy terméktípus megmondja, milyen alkatrészekből áll a termék, és azokhoz milyen anyag kell. Új projektnél ezek a sorok jönnek elő, csak a méretet és a mennyiséget kell megadni. A módosítás a már meglévő projekteket nem változtatja meg.</div>
+        <div class="actions">${tpls.map((t) => `<button class="${tplEdit && tplEdit.id === t.id ? 'primary' : ''}" data-edit="${t.id}">${esc(t.nev)}</button>`).join('')}<button id="newTpl">+ Új terméktípus</button></div>
+      </section>
+      ${tplEdit ? `<section class="panel" id="tplEd">
+        <div class="row"><div class="field"><label for="tName">Terméktípus neve</label><input type="text" id="tName" value="${esc(tplEdit.nev)}" placeholder="pl. Billenő konténer"></div></div>
+        ${tplEdit.reszek.map((r) => `<div class="tpl-part" data-tp="${r.id}">
+          <div class="row" style="align-items:center"><div class="field"><label for="tp-${r.id}">Alkatrész</label><input type="text" id="tp-${r.id}" data-tf="nev" value="${esc(r.nev)}" placeholder="pl. Villapapucs"></div><button class="ghost" data-tdelpart="${r.id}" aria-label="Alkatrész törlése">✕</button></div>
+          <div class="hint">Anyagok: megnevezés, kategória, alkategória</div>
+          ${r.anyagok.map((a) => `<div class="tpl-slot" data-ta="${a.id}">
+            <input type="text" id="ta-${a.id}" data-af="cimke" value="${esc(a.cimke)}" placeholder="pl. Zártszelvény" aria-label="Anyag megnevezése">
+            <select id="tk-${a.id}" data-af="kat" aria-label="Kategória">${catOpts(a.kat)}</select>
+            <select id="ts-${a.id}" data-af="al" aria-label="Alkategória" ${a.kat && a.kat !== EGYEDI ? '' : 'disabled'}>${subOpts(a.kat, a.al)}</select>
+            <button class="ghost" data-tdelslot="${a.id}" aria-label="Anyag törlése">✕</button></div>`).join('')}
+          <div><button class="small" data-taddslot="${r.id}">+ Anyag</button></div>
+        </div>`).join('')}
+        <div><button class="small" id="tAddPart">+ Alkatrész</button></div>
+        <div class="actions"><button class="primary" id="tSave">Mentés</button><button id="tCancel">Mégse</button>${Store.tpls.some((x) => x.id === tplEdit.id) ? '<button id="tDel">Terméktípus törlése</button>' : ''}</div>
+      </section>` : ''}
+      </div>`;
+    $('back').addEventListener('click', () => { tplEdit = null; go({ view: 'home' }); });
+    $('newTpl').addEventListener('click', () => { tplEdit = { id: uid(), nev: '', reszek: [{ id: uid(), nev: '', anyagok: [{ id: uid(), cimke: '', kat: '', al: '' }] }] }; renderTemplates(); $('tName').focus(); });
+    $('view').querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => { tplEdit = clone(Store.tpls.find((t) => t.id === b.dataset.edit)); tplEdit.reszek = tplEdit.reszek || []; tplEdit.reszek.forEach((r) => { r.id = r.id || uid(); r.anyagok = (r.anyagok || []).map((a) => ({ id: a.id || uid(), ...a })); }); renderTemplates(); }));
+    if (!tplEdit) return;
+    const ed = $('tplEd');
+    const partOf = (el) => tplEdit.reszek.find((r) => r.id === el.closest('[data-tp]').dataset.tp);
+    const slotOf = (el) => partOf(el).anyagok.find((a) => a.id === el.closest('[data-ta]').dataset.ta);
+    $('tName').addEventListener('input', (e) => { tplEdit.nev = e.target.value; });
+    ed.addEventListener('input', (e) => {
+      const el = e.target;
+      if (el.dataset.tf) partOf(el).nev = el.value;
+      if (el.dataset.af === 'cimke') slotOf(el).cimke = el.value;
+    });
+    ed.addEventListener('change', (e) => {
+      const el = e.target;
+      if (el.dataset.af === 'kat') { const a = slotOf(el); a.kat = el.value; a.al = ''; if (!a.cimke) a.cimke = el.value; renderTemplates(); }
+      if (el.dataset.af === 'al') slotOf(el).al = el.value;
+    });
+    ed.addEventListener('click', async (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.taddslot) { tplEdit.reszek.find((r) => r.id === b.dataset.taddslot).anyagok.push({ id: uid(), cimke: '', kat: '', al: '' }); renderTemplates(); }
+      if (b.dataset.tdelslot) { const r = partOf(b); r.anyagok = r.anyagok.filter((a) => a.id !== b.dataset.tdelslot); renderTemplates(); }
+      if (b.dataset.tdelpart) { tplEdit.reszek = tplEdit.reszek.filter((r) => r.id !== b.dataset.tdelpart); renderTemplates(); }
+      if (b.id === 'tAddPart') { tplEdit.reszek.push({ id: uid(), nev: '', anyagok: [{ id: uid(), cimke: '', kat: '', al: '' }] }); renderTemplates(); }
+      if (b.id === 'tCancel') { tplEdit = null; renderTemplates(); }
+      if (b.id === 'tSave') {
+        if (!tplEdit.nev.trim()) { toast('Adj nevet a terméktípusnak.'); $('tName').focus(); return; }
+        const body = { id: tplEdit.id, nev: tplEdit.nev.trim(), reszek: tplEdit.reszek.filter((r) => r.nev.trim() || r.anyagok.some((a) => a.cimke || a.kat))
+          .map((r) => ({ id: r.id, nev: r.nev.trim() || 'Alkatrész', anyagok: r.anyagok.filter((a) => a.cimke || a.kat).map((a) => ({ id: a.id, cimke: a.cimke.trim() || a.kat, kat: a.kat, al: a.al, ...(a.egyseg ? { egyseg: a.egyseg } : {}) })) })) };
+        try { await Store.save('tpl', body); toast('Terméktípus elmentve.'); tplEdit = null; renderTemplates(); } catch (err) {}
+      }
+      if (b.id === 'tDel') {
+        if (b.dataset.arm !== '1') { b.dataset.arm = '1'; b.textContent = 'Biztosan törlöd? Kattints újra'; return; }
+        try { await Store.remove('tpl', tplEdit.id); toast('Terméktípus törölve.'); } catch (err) { toast('Nem sikerült törölni.'); }
+        tplEdit = null; renderTemplates();
+      }
+    });
+  }
+
+  // ================= indulás =================
+  fetch('prices.json').then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); }).then((d) => {
+    DATA = d;
+    const cm = new Map();
+    DATA.items.forEach((it) => {
+      it._k = norm(it.n + ' ' + it.c + ' ' + it.s + ' ' + (it.g || '')); byUrl.set(it.url, it);
+      const k = groupKey(it); if (!GROUPS.has(k)) GROUPS.set(k, []); GROUPS.get(k).push(it);
+      if (!cm.has(it.c)) cm.set(it.c, new Set()); cm.get(it.c).add(it.s);
+    });
+    CATS = [...cm].map(([c, s]) => ({ c, subs: [...s] }));
+    $('meta').innerHTML = `Timár Vasker + tetolemez.hu + metallonova.hu · ${fmt.format(DATA.items.length)} termék · frissítve: <span class="num">${esc(DATA.date)}</span>`;
+    render();
+    Store.init();
+  }).catch(() => { $('meta').textContent = 'Az árlistát nem sikerült betölteni. Frissítsd az oldalt.'; });
+  window.addEventListener('beforeunload', () => { if (saveTimer) flushSave(); });
+})();
+</script>
