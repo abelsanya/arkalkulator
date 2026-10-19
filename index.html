@@ -129,6 +129,8 @@ td.r, th.r { text-align: right; }
 .totals .line { display: flex; justify-content: space-between; gap: 12px; }
 .totals .line.big { font-family: var(--font-display); font-weight: 800; font-size: 20px; padding-top: 6px; }
 .totals .line.muted { color: var(--muted); font-size: 13px; }
+.totals .unitbox { background: var(--accent-soft); border-radius: 8px; padding: 4px 10px 8px; margin: 6px 0; color: var(--ink); }
+.totals .unitbox .line.big { color: var(--accent); }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* sablonszerkesztő */
@@ -393,7 +395,7 @@ td.r, th.r { text-align: right; }
     const nev = $('nName').value.trim(); if (!nev) return;
     const t = Store.tpls.find((x) => x.id === $('nTpl').value);
     const p = { id: uid(), nev, leiras: $('nDesc').value.trim(), termekId: t ? t.id : '', termekNev: t ? t.nev : '', reszek: partsFromTemplate(t),
-      szolg: [], margin: '0', vat: '27', letrehozva: new Date().toISOString(), modositva: new Date().toISOString() };
+      db: '1', szolg: [], margin: '0', vat: '27', letrehozva: new Date().toISOString(), modositva: new Date().toISOString() };
     if (!p.reszek.length) p.reszek.push({ id: uid(), nev: 'Anyagok', sorok: [] });
     try { await Store.save('proj', p); } catch (e) { return; }
     cur = clone(p); route = { view: 'project', id: p.id }; render();
@@ -401,32 +403,58 @@ td.r, th.r { text-align: right; }
 
   // ---------- projekt ----------
   const EGYEDI = 'Egyedi (kézi ár)';
-  function lineCalc(l) {
+  const pieces = (p) => Math.max(1, Math.round(num(p.db || 1)) || 1);
+  // Elméleti súly kg-ban: q mennyiség u módban megadva (fm, szál, tábla, m², kg); null, ha nem ismert
+  function weightOf(it, q, u) {
+    if (u === 'kg') return q;
+    if (!it.w) return null;
+    let amt = null, kind = null;
+    if (u === 'fm' || u === 'fm-a') { amt = q; kind = 'm'; }
+    else if (u === 'szál' && it.l) { amt = q * it.l; kind = 'm'; }
+    else if (u === 'tábla' && plateArea(it)) { amt = q * plateArea(it); kind = 'm2'; }
+    else if (u === 'm²' || u === 'm²-a') { amt = q; kind = 'm2'; }
+    return kind === it.wu ? amt * it.w : null;
+  }
+  // l: anyagsor egy termékre; n: a projektben készülő darabszám. A kerekítés (egész szál, tábla) az összes darabra együtt történik.
+  function lineCalc(l, n = 1) {
+    const q1 = num(l.qty), q = q1 * n;
     if (l.kat === EGYEDI) {
       // árlistában nem szereplő anyag: nettó egységár kézzel
-      const q = num(l.qty), price = num(l.price);
-      return { custom: true, it: { n: l.name || l.cimke || 'Egyedi tétel' }, opts: [], r: { bill: q, billUnit: l.unit || 'db', note: '' }, net: q * price, netPer: price };
+      const price = num(l.price);
+      return { custom: true, it: { n: l.name || l.cimke || 'Egyedi tétel' }, opts: [], q, n, r: { bill: q, billUnit: l.unit || 'db', note: '' }, net: q * price, netPer: price, kg: l.unit === 'kg' ? q : null };
     }
     if (!l.url) return null;
     const it = byUrl.get(l.url) || l.snap; if (!it) return null;
     const opts = unitOptions(it);
     const o = opts.find((x) => x.u === l.unit) || opts[0];
-    const r = o.calc(num(l.qty));
+    const r = o.calc(q);
     const net = r.gross / VAT_BASE;
-    return { it, opts, o, r, net, netPer: r.bill ? net / r.bill : 0, missing: !byUrl.get(l.url) };
+    return { it, opts, o, r, q, n, net, netPer: r.bill ? net / r.bill : 0, kg: q ? weightOf(it, q, o.u) : 0, missing: !byUrl.get(l.url) };
   }
   function totals(p) {
     const m = num(p.margin), vat = num(p.vat || 27), mul = 1 + m / 100;
-    let matCost = 0;
-    (p.reszek || []).forEach((r) => r.sorok.forEach((l) => { const c = lineCalc(l); if (c) matCost += c.net; }));
+    const n = pieces(p);
+    let matCost = 0, kg = 0, noKg = 0;
+    (p.reszek || []).forEach((r) => r.sorok.forEach((l) => {
+      const c = lineCalc(l, n); if (!c) return;
+      matCost += c.net;
+      if (c.q) { if (c.kg == null) noKg++; else kg += c.kg; }
+    }));
     const mat = matCost * mul;
     const svc = (p.szolg || []).reduce((a, s) => a + num(s.qty) * num(s.price), 0);
-    const net = mat + svc;
-    return { matCost, mat, svc, net, vatAmt: net * vat / 100, gross: net * (1 + vat / 100), m, vat, mul };
+    const net = mat + svc, gross = net * (1 + vat / 100);
+    return { n, matCost, mat, svc, net, vatAmt: net * vat / 100, gross, unitNet: net / n, unitGross: gross / n, kg, noKg, m, vat, mul };
   }
 
+  function slotNote(c) {
+    if (!c || !c.q) return '';
+    const per = c.n > 1 ? `${c.n} db × ${fmt2.format(c.q / c.n)} = ${fmt2.format(c.q)} ${c.custom ? c.r.billUnit : (c.o.u === 'szál' || c.o.u === 'tábla' || c.o.u === 'kg' ? c.o.u : c.o.u.startsWith('m²') ? 'm²' : 'fm')}` : '';
+    // a kg-ban árazott anyagnál a megjegyzés már mutatja a súlyt
+    const kg = c.kg != null && c.kg > 0 && !(c.r.note || '').includes('kg') ? `nettó ${fmt2.format(c.kg)} kg` : '';
+    return [per, c.r.note, kg].filter(Boolean).join(' · ');
+  }
   function slotHTML(part, l) {
-    const c = lineCalc(l), mul = 1 + num(cur.margin) / 100;
+    const c = lineCalc(l, pieces(cur)), mul = 1 + num(cur.margin) / 100;
     const filt = [l.kat, l.al].filter(Boolean).join(' · ');
     const open = picker && picker.slotId === l.id;
     if (c && c.custom) return `<div class="slot" data-part="${part.id}" data-slot="${l.id}">
@@ -436,7 +464,7 @@ td.r, th.r { text-align: right; }
         <div class="qty"><input type="text" inputmode="decimal" id="cp-${l.id}" data-act="cprice" value="${esc(l.price || '')}" placeholder="0" aria-label="Nettó egységár" style="width:110px"><span class="sub" style="padding-top:8px">Ft nettó beszerzési ár / egység</span></div>
       </div>
       <div class="qtycell"><div class="qty"><input type="text" inputmode="decimal" id="q-${l.id}" data-act="qty" value="${esc(l.qty)}" placeholder="0" aria-label="Mennyiség">
-        <input type="text" id="cu-${l.id}" data-act="cunit" value="${esc(l.unit || '')}" placeholder="m²" aria-label="Egység"></div><div class="sub num" data-note></div></div>
+        <input type="text" id="cu-${l.id}" data-act="cunit" value="${esc(l.unit || '')}" placeholder="m²" aria-label="Egység"></div><div class="sub num" data-note>${esc(slotNote(c))}</div></div>
       <div class="total num" data-total>${ft(c.net * mul)}</div>
       <div class="del"><button class="ghost" data-act="del" aria-label="Sor törlése">✕</button></div>
     </div>`;
@@ -449,7 +477,7 @@ td.r, th.r { text-align: right; }
       </div>
       <div class="qtycell">${c ? `<div class="qty"><input type="text" inputmode="decimal" id="q-${l.id}" data-act="qty" value="${esc(l.qty)}" placeholder="0" aria-label="Mennyiség">
           <select id="u-${l.id}" data-act="unit" aria-label="Egység">${c.opts.map((o) => `<option value="${o.u}" ${o.u === c.o.u ? 'selected' : ''}>${esc(o.label)}</option>`).join('')}</select></div>
-          <div class="sub num" data-note>${esc(c.r.note || '')}</div>` : ''}</div>
+          <div class="sub num" data-note>${esc(slotNote(c))}</div>` : ''}</div>
       <div class="total num" data-total>${c ? ft(c.net * mul) : ''}${c && c.r.bill ? `<div class="sub">${ft(c.netPer * mul)}/${esc(c.r.billUnit)}</div>` : ''}</div>
       <div class="del"><button class="ghost" data-act="del" aria-label="Sor törlése">✕</button></div>
       ${open ? pickerHTML(l) : ''}
@@ -486,10 +514,12 @@ td.r, th.r { text-align: right; }
           <div class="field"><label for="pName">Projekt neve</label><input type="text" id="pName" data-pf="nev" value="${esc(p.nev)}"></div>
           <div class="field"><label for="pDesc">Leírás</label><input type="text" id="pDesc" data-pf="leiras" value="${esc(p.leiras || '')}" placeholder="pl. Kónusz"></div>
           <div class="field" style="flex:0 1 200px"><span class="lbl">Termék</span><div style="padding-top:6px;font-weight:600">${esc(p.termekNev || 'Egyedi')}</div></div>
+          <div class="field" style="flex:0 1 140px"><label for="pDb">Darabszám</label><input type="text" id="pDb" inputmode="numeric" value="${esc(p.db || '1')}"></div>
         </div>
       </section>
       <section class="panel" aria-labelledby="h-mat">
         <h2 id="h-mat">Anyagok alkatrészenként</h2>
+        <div class="hint">A mennyiséget egy termékre add meg. A program felszorozza a darabszámmal, és az összes mennyiséget kerekíti egész szálra vagy táblára.</div>
         ${p.reszek.map((part) => `<div class="part" data-part="${part.id}">
           <div class="part-head"><input type="text" id="pn-${part.id}" data-act="partname" value="${esc(part.nev)}" aria-label="Alkatrész neve">
             <div class="actions"><button class="small" data-act="addslot">+ Anyag</button><button class="small" data-act="addcustom">+ Kézi tétel</button><button class="ghost" data-act="delpart" aria-label="Alkatrész törlése">✕</button></div></div>
@@ -499,6 +529,7 @@ td.r, th.r { text-align: right; }
       </section>
       <section class="panel" aria-labelledby="h-svc">
         <h2 id="h-svc">Munkadíj és szolgáltatások</h2>
+        <div class="hint">A teljes rendelésre (az összes darabra) add meg.</div>
         <div class="presets" id="presets">${PRESETS.map((x) => `<button class="small" data-p="${x[0]}" data-u="${x[1]}">+ ${x[0]}</button>`).join('')}</div>
         ${p.szolg.length ? `<div class="tablewrap"><table class="svc"><thead><tr><th>Megnevezés</th><th class="r">Mennyiség</th><th>Egység</th><th class="r">Nettó egységár</th><th class="r">Nettó</th><th></th></tr></thead><tbody id="svcs">
           ${p.szolg.map((s) => `<tr data-sid="${s.id}">
@@ -521,7 +552,7 @@ td.r, th.r { text-align: right; }
           <button class="primary" id="copyTable">Táblázat másolása Wordbe</button>
           <button id="copyTotal">Csak a végösszeg másolása</button>
         </div>
-        <div class="hint">Az árak a Timár Vasker, a tetolemez.hu és a metallonova.hu webáruház bruttó árai, a nettó ár ezekből számolt (÷ 1,27). A kg-os anyagok átváltása elméleti tömeggel (7,85 kg/dm³) történik.</div>
+        <div class="hint">Az árak a Timár Vasker, a tetolemez.hu és a metallonova.hu webáruház bruttó árai, a nettó ár ezekből számolt (÷ 1,27). A kg-os anyagok átváltása és a súly elméleti tömeggel (acél 7,85 kg/dm³, szabványos szelvénytáblák) számolt, a lekerekített sarkok miatt a valós súly pár százalékkal kevesebb lehet.</div>
       </section>
       </div>`;
     bindProject();
@@ -533,7 +564,14 @@ td.r, th.r { text-align: right; }
       <div class="line"><span>Munkadíj és szolgáltatások (nettó)</span><span class="num">${ft(t.svc)}</span></div>
       <div class="line"><span>Nettó összesen</span><span class="num">${ft(t.net)}</span></div>
       <div class="line"><span>ÁFA ${fmt2.format(t.vat)}%</span><span class="num">${ft(t.vatAmt)}</span></div>
-      <div class="line big"><span>Bruttó összesen</span><span class="num">${ft(t.gross)}</span></div>`;
+      <div class="line big"><span>Bruttó összesen${t.n > 1 ? ` (${t.n} db)` : ''}</span><span class="num">${ft(t.gross)}</span></div>
+      <div class="unitbox">
+        <div class="line big"><span>Egységár (1 db) nettó</span><span class="num">${ft(t.unitNet)}</span></div>
+        <div class="line"><span>Egységár (1 db) bruttó</span><span class="num">${ft(t.unitGross)}</span></div>
+      </div>
+      <div class="line"><span>Felhasznált anyag nettó súlya${t.n > 1 ? ` (${t.n} db)` : ''}</span><span class="num">${fmt2.format(t.kg)} kg</span></div>
+      ${t.n > 1 ? `<div class="line muted"><span>1 db termék anyagsúlya</span><span class="num">${fmt2.format(t.kg / t.n)} kg</span></div>` : ''}
+      ${t.noKg ? `<div class="line muted"><span>${t.noKg} tétel súlya nem ismert, ez nincs benne</span><span></span></div>` : ''}`;
   }
   const PRESETS = [['Munkadíj', 'óra'], ['Vágás', 'vágás'], ['Hegesztés', 'óra'], ['Festés', 'm²'], ['Szállítás', 'alkalom'], ['Egyéb', 'db']];
 
@@ -543,8 +581,8 @@ td.r, th.r { text-align: right; }
     return { part, l: part && part.sorok.find((x) => x.id === s.dataset.slot), node: s };
   }
   function refreshSlot(node, l) {
-    const c = lineCalc(l), mul = 1 + num(cur.margin) / 100; if (!c) return;
-    node.querySelector('[data-note]').textContent = c.r.note || '';
+    const c = lineCalc(l, pieces(cur)), mul = 1 + num(cur.margin) / 100; if (!c) return;
+    node.querySelector('[data-note]').textContent = slotNote(c);
     if (c.custom) { node.querySelector('[data-total]').textContent = ft(c.net * mul); return; }
     node.querySelector('[data-total]').innerHTML = `${ft(c.net * mul)}${c.r.bill ? `<div class="sub">${ft(c.netPer * mul)}/${esc(c.r.billUnit)}</div>` : ''}`;
   }
@@ -567,6 +605,7 @@ td.r, th.r { text-align: right; }
     });
     v.querySelectorAll('[data-pf]').forEach((el) => el.addEventListener('input', () => { cur[el.dataset.pf] = el.value; if (el.dataset.pf === 'nev') $('title').textContent = el.value; touch(); }));
     $('addPart').addEventListener('click', () => { cur.reszek.push({ id: uid(), nev: 'Új alkatrész', sorok: [] }); touch(); render(); });
+    $('pDb').addEventListener('input', (e) => { cur.db = e.target.value; touch(); v.querySelectorAll('[data-slot]').forEach((n) => { const f = findSlot(n); if (f.l) refreshSlot(n, f.l); }); refreshTotals(); });
     ['margin', 'vat'].forEach((k) => $(k).addEventListener('input', (e) => { cur[k] = e.target.value; touch(); v.querySelectorAll('[data-slot]').forEach((n) => { const f = findSlot(n); if (f.l && f.l.url) refreshSlot(n, f.l); }); refreshTotals(); }));
 
     $('copyTable').addEventListener('click', copyTable);
@@ -647,7 +686,7 @@ td.r, th.r { text-align: right; }
     const td = 'style="border:1px solid #999;padding:4px 6px"', tdr = 'style="border:1px solid #999;padding:4px 6px;text-align:right"';
     const hrows = [], trows = [];
     cur.reszek.forEach((part) => {
-      const ls = part.sorok.map((l) => [l, lineCalc(l)]).filter(([, c]) => c && c.r.bill);
+      const ls = part.sorok.map((l) => [l, lineCalc(l, t.n)]).filter(([, c]) => c && c.r.bill);
       if (!ls.length) return;
       hrows.push(`<tr><td ${td} colspan="4"><b>${esc(part.nev)}</b></td></tr>`); trows.push(part.nev);
       ls.forEach(([l, c]) => {
@@ -660,18 +699,19 @@ td.r, th.r { text-align: right; }
       hrows.push(`<tr><td ${td} colspan="4"><b>Munkadíj és szolgáltatások</b></td></tr>`); trows.push('Munkadíj és szolgáltatások');
       svcs.forEach((s) => { const r = [s.name, fmt2.format(num(s.qty)) + ' ' + s.unit, ft(num(s.price)), ft(num(s.qty) * num(s.price))]; hrows.push(`<tr><td ${td}>${esc(r[0])}</td><td ${td}>${esc(r[1])}</td><td ${tdr}>${r[2]}</td><td ${tdr}>${r[3]}</td></tr>`); trows.push(r.join('\t')); });
     }
-    const foot = [['Nettó összesen', ft(t.net)], [`ÁFA ${fmt2.format(t.vat)}%`, ft(t.vatAmt)], ['Bruttó összesen', ft(t.gross)]];
+    const foot = [['Nettó összesen' + (t.n > 1 ? ` (${t.n} db)` : ''), ft(t.net)], [`ÁFA ${fmt2.format(t.vat)}%`, ft(t.vatAmt)], ['Bruttó összesen' + (t.n > 1 ? ` (${t.n} db)` : ''), ft(t.gross)]];
+    if (t.n > 1) foot.push(['Egységár (1 db) nettó', ft(t.unitNet)], ['Egységár (1 db) bruttó', ft(t.unitGross)]);
     const html = `<table style="border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:11pt">
       <tr><th ${td}>Megnevezés</th><th ${td}>Mennyiség</th><th ${tdr}>Nettó egységár</th><th ${tdr}>Nettó összeg</th></tr>
       ${hrows.join('')}
-      ${foot.map((f, i) => `<tr><td ${td} colspan="3">${i === 2 ? '<b>' + f[0] + '</b>' : f[0]}</td><td ${tdr}>${i === 2 ? '<b>' + f[1] + '</b>' : f[1]}</td></tr>`).join('')}
+      ${foot.map((f, i) => `<tr><td ${td} colspan="3">${i === 2 || i === 3 ? '<b>' + f[0] + '</b>' : f[0]}</td><td ${tdr}>${i === 2 || i === 3 ? '<b>' + f[1] + '</b>' : f[1]}</td></tr>`).join('')}
     </table>`;
     const text = ['Megnevezés\tMennyiség\tNettó egységár\tNettó összeg', ...trows, ...foot.map((f) => f[0] + '\t\t\t' + f[1])].join('\n');
     copy(html, text);
   }
   function copyTotal() {
     const t = totals(cur);
-    const text = `Nettó: ${ft(t.net)}, ÁFA ${fmt2.format(t.vat)}%: ${ft(t.vatAmt)}, bruttó: ${ft(t.gross)}`;
+    const text = `Nettó: ${ft(t.net)}, ÁFA ${fmt2.format(t.vat)}%: ${ft(t.vatAmt)}, bruttó: ${ft(t.gross)}` + (t.n > 1 ? ` (${t.n} db; egységár nettó ${ft(t.unitNet)}, bruttó ${ft(t.unitGross)})` : '');
     copy(`<span>${esc(text)}</span>`, text);
   }
 
