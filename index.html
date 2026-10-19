@@ -526,8 +526,9 @@ td.r, th.r { text-align: right; }
       <section class="panel" aria-labelledby="h-mat">
         <h2 id="h-mat">Anyagok alkatrészenként</h2>
         <div class="hint">A mennyiséget egy termékre add meg. A program felszorozza a darabszámmal, és az összes mennyiséget kerekíti egész szálra vagy táblára.</div>
-        <details class="szabas"><summary>Lemez beillesztése a szabás-számításból</summary>
-          <div class="hint">Előbb a Lemez sorban válaszd ki a lemezt (anyag, vastagság). Utána másold ide a szabásprogram eredményét a „Felhasznált lemezek száma” résztől, és kattints a Beolvasás gombra. A táblák száma a teljes rendelésre szól, nem szorzódik a darabszámmal.</div>
+        <details class="szabas"><summary>Lemez betöltése a szabás-számításból</summary>
+          <div class="hint">Töltsd be a szabásprogram exportfájlját (.json), vagy másold ide az eredményét a „Felhasznált lemezek száma” résztől. Ha a fájlban nincs vastagság, előbb a Lemez sorban válaszd ki a lemezt. A táblák száma a teljes rendelésre szól, nem szorzódik a darabszámmal.</div>
+          <div class="row" style="align-items:center;gap:8px;margin-top:6px"><label class="small" style="cursor:pointer" for="szabFile"><span class="small" style="border:1px solid var(--line);border-radius:6px;padding:6px 10px;display:inline-block">Exportfájl betöltése…</span></label><input type="file" id="szabFile" accept=".json,.txt,application/json,text/plain" style="position:absolute;left:-9999px"><span class="sub">vagy beillesztés:</span></div>
           <textarea id="szabText" placeholder="Felhasznált lemezek száma: 4&#10;  4 db  1000 x 2000 mm&#10;Összes táblaterület: 8.00 m²&#10;Beépülő terület:     7.15 m²"></textarea>
           <button class="small primary" id="szabBtn">Beolvasás</button>
         </details>
@@ -619,7 +620,8 @@ td.r, th.r { text-align: right; }
     $('pDb').addEventListener('input', (e) => { cur.db = e.target.value; touch(); v.querySelectorAll('[data-slot]').forEach((n) => { const f = findSlot(n); if (f.l) refreshSlot(n, f.l); }); refreshTotals(); });
     ['margin', 'vat'].forEach((k) => $(k).addEventListener('input', (e) => { cur[k] = e.target.value; touch(); v.querySelectorAll('[data-slot]').forEach((n) => { const f = findSlot(n); if (f.l && f.l.url) refreshSlot(n, f.l); }); refreshTotals(); }));
 
-    $('szabBtn').addEventListener('click', importSzabas);
+    $('szabBtn').addEventListener('click', () => importSzabas($('szabText').value));
+    $('szabFile').addEventListener('change', async (e) => { const f = e.target.files[0]; if (f) importSzabas(await f.text()); e.target.value = ''; });
     $('copyTable').addEventListener('click', copyTable);
     $('copyTotal').addEventListener('click', copyTotal);
   }
@@ -678,16 +680,35 @@ td.r, th.r { text-align: right; }
 
   // ---------- szabás-számítás eredményének beolvasása ----------
   // Pl. "  4 db  1000 x 2000 mm" sorok és "Beépülő terület: 7.15 m²"
-  function importSzabas() {
-    const txt = $('szabText').value;
-    const sheets = [...txt.matchAll(/(\d+)\s*db\s+(\d+)\s*[x×]\s*(\d+)\s*mm/gi)].map((m) => ({ n: +m[1], w: +m[2], h: +m[3] }));
-    if (!sheets.length) { toast('Nem találtam táblát a szövegben (pl. „4 db 1000 x 2000 mm”).'); return; }
-    const used = (txt.match(/Beépülő terület:\s*([\d.,]+)/i) || [])[1];
-    // a cél: az első Lemez sor, amelyben már ki van választva a lemez
+  // Exportfájl (JSON, lásd SZABAS_EXPORT.md) vagy a program szöveges eredménye
+  function parseSzabas(txt) {
+    let j = null; try { j = JSON.parse(txt); } catch (e) {}
+    if (j && Array.isArray(j.tablak)) {
+      const darab = Array.isArray(j.termekek) ? j.termekek.reduce((a, t) => a + (+t.darab || 0), 0) : +j.darab || 0;
+      return { sheets: j.tablak.map((t) => ({ n: +t.db, w: +t.szel, h: +t.hossz })).filter((t) => t.n && t.w && t.h),
+        used: j.beepulo_terulet_m2 != null ? String(j.beepulo_terulet_m2) : null, darab, t: num(j.vastagsag_mm), anyag: j.anyag || '', nev: j.projekt || '' };
+    }
+    return { sheets: [...txt.matchAll(/(\d+)\s*db\s+(\d+)\s*[x×]\s*(\d+)\s*mm/gi)].map((m) => ({ n: +m[1], w: +m[2], h: +m[3] })),
+      used: (txt.match(/Beépülő terület:\s*([\d.,]+)/i) || [])[1], darab: 0, t: 0, anyag: '' };
+  }
+  function importSzabas(txt) {
+    const z = parseSzabas(txt), sheets = z.sheets, used = z.used;
+    if (!sheets.length) { toast('Nem találtam táblát (pl. „4 db 1000 x 2000 mm”, vagy a JSON „tablak” listája).'); return; }
+    // a cél: az első Lemez sor; az anyag és a vastagság a kiválasztott lemezből, vagy a fájlból jön
     let part = null, line = null;
     for (const r of cur.reszek) { const l = r.sorok.find((x) => x.url && (byUrl.get(x.url) || x.snap)?.c === 'Lemez'); if (l) { part = r; line = l; break; } }
-    if (!line) { toast('Előbb válaszd ki a lemezt (vastagságot) a Lemez sorban, utána olvasd be a szabást.'); return; }
-    const base = byUrl.get(line.url) || line.snap;
+    if (!line) for (const r of cur.reszek) { const l = r.sorok.find((x) => !x.url && x.kat === 'Lemez'); if (l) { part = r; line = l; break; } }
+    let base = line && line.url ? byUrl.get(line.url) || line.snap : null;
+    if (z.t && (!base || num((base.m || '').split('x')[0]) !== z.t)) {
+      // a fájl vastagsága dönt; az alkategória a fájl anyag mezőjéből, a sablonból, vagy hidegen hengerelt
+      const hint = norm(z.anyag || (base && base.s) || (line && line.al) || 'Hidegen hengerelt');
+      const cands = DATA.items.filter((x) => x.c === 'Lemez' && num((x.m || '').split('x')[0]) === z.t);
+      base = cands.find((x) => norm(x.s).includes(hint) || hint.includes(norm(x.s))) || cands.find((x) => /hidegen/i.test(x.s)) || cands[0] || null;
+      if (!base) { toast(`Nincs ${fmt2.format(z.t)} mm-es lemez az árlistában.`); return; }
+    }
+    if (!base) { toast('Előbb válaszd ki a lemezt (vastagságot) a Lemez sorban, utána olvasd be a szabást.'); return; }
+    if (!line) { part = cur.reszek[0]; line = { id: uid(), cimke: 'Lemez', kat: 'Lemez', al: '' }; part.sorok.unshift(line); }
+    if (z.darab) cur.db = String(z.darab);
     const t = num((base.m || '').split('x')[0]);
     const find = (w, h) => DATA.items.find((x) => x.c === base.c && x.s === base.s && (x.g || '') === (base.g || '') && (() => { const n = (x.m || '').split('x').map(num); return n.length >= 3 && n[0] === t && ((n[1] === w && n[2] === h) || (n[1] === h && n[2] === w)); })());
     const missing = sheets.filter((sh) => !find(sh.w, sh.h));
@@ -703,7 +724,8 @@ td.r, th.r { text-align: right; }
       if (i > 0) part.sorok.splice(part.sorok.indexOf(line) + i, 0, l);
     });
     touch(); render();
-    toast(`Beolvasva: ${sheets.map((sh) => sh.n + ' tábla ' + sh.w + 'x' + sh.h).join(', ')}${netAll ? `, beépülő ${fmt2.format(netAll)} m²` : ''}.`);
+    if ($('szabText')) $('szabText').value = '';
+    toast(`Beolvasva${z.darab ? `, darabszám ${z.darab}` : ''}: ${sheets.map((sh) => sh.n + ' tábla ' + sh.w + 'x' + sh.h).join(', ')}${netAll ? `, beépülő ${fmt2.format(netAll)} m²` : ''}.`);
   }
 
   // ---------- másolás ----------
