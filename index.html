@@ -281,6 +281,8 @@ td.r, th.r { text-align: right; }
         this.db.collection('projektek').orderBy('modositva', 'desc').limit(500).onSnapshot((s) => {
           this.projs = s.docs.map((d) => ({ id: d.id, ...clone(d.data()), _pending: d.metadata.hasPendingWrites })); this.onChange('proj');
         }, () => {});
+      } else if (await this._initRemote()) {
+        // közös mentés Google táblázatba (beallitas.json: kozos_url)
       } else {
         $('localBanner').hidden = false;
         this.tpls = this._lget('tpl'); this.projs = this._lget('proj');
@@ -291,6 +293,54 @@ td.r, th.r { text-align: right; }
         this.onChange('tpl'); this.onChange('proj');
       }
     },
+    // ---- közös tár: Google Apps Script webalkalmazás ----
+    remote: null, inflight: 0,
+    async _initRemote() {
+      let url = '';
+      try { const r = await fetch('beallitas.json', { cache: 'no-store' }); if (r.ok) url = ((await r.json()).kozos_url || '').trim(); } catch (e) {}
+      if (!url) return false;
+      this.remote = url;
+      try { await this._pull(true); }
+      catch (e) { this.remote = null; $('localBanner').textContent = 'A közös mentés most nem érhető el, ezért a változások csak ebben a böngészőben maradnak meg.'; return false; }
+      try {
+        // első indítás: alap terméktípusok; korábbi, csak helyben mentett projektek feltöltése
+        if (!this.tpls.length) { const r = await fetch('termektipusok.json'); if (r.ok) for (const t of await r.json()) await this.save('tpl', t); }
+        if (!localStorage.getItem('acelkalk-feltoltve')) {
+          for (const p of this._lget('proj')) if (!this.projs.some((x) => x.id === p.id)) await this.save('proj', p);
+          localStorage.setItem('acelkalk-feltoltve', '1');
+        }
+      } catch (e) {}
+      setInterval(() => { if (!document.hidden) this._pull().catch(() => {}); }, 20000);
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) this._pull().catch(() => {}); });
+      return true;
+    },
+    async _get(kind) {
+      const r = await fetch(this.remote + (this.remote.includes('?') ? '&' : '?') + 'kind=' + kind, { cache: 'no-store' });
+      const j = await r.json(); if (!j.ok) throw new Error(j.error); return j.items;
+    },
+    async _post(body) {
+      this.inflight++;
+      try {
+        const r = await fetch(this.remote, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
+        const j = await r.json(); if (!j.ok) throw new Error(j.error);
+      } finally { this.inflight--; }
+    },
+    async _pull(first) {
+      if (this.inflight && !first) return;
+      const [t, p] = await Promise.all([this._get('tpl'), this._get('proj')]);
+      if (this.inflight && !first) return;
+      // ha nálunk újabb a projekt (mentés úton van), a sajátunk marad
+      const mine = new Map(this.projs.map((x) => [x.id, x]));
+      const projs = p.map((x) => { const m = mine.get(x.id); return m && String(m.modositva) > String(x.modositva) ? m : x; })
+        .sort((a, b) => String(b.modositva).localeCompare(String(a.modositva)));
+      if (first || JSON.stringify(t) !== JSON.stringify(this.tpls)) { this.tpls = t; this.onChange('tpl'); }
+      if (first || JSON.stringify(projs) !== JSON.stringify(this.projs)) { this.projs = projs; this.onChange('proj'); }
+    },
+    _local(kind, fn) {
+      const k = kind === 'tpl' ? 'tpls' : 'projs'; this[k] = fn(this[k]);
+      if (kind === 'proj') this[k].sort((a, b) => String(b.modositva).localeCompare(String(a.modositva)));
+      this.onChange(kind);
+    },
     _lget(k) { try { return JSON.parse(localStorage.getItem('acelkalk-' + k)) || []; } catch (e) { return []; } },
     _lset(k, v) { try { localStorage.setItem('acelkalk-' + k, JSON.stringify(v)); } catch (e) {} },
     async save(kind, obj) {
@@ -298,6 +348,10 @@ td.r, th.r { text-align: right; }
       if (this.db) {
         try { await this.db.collection(kind === 'tpl' ? 'termektipusok' : 'projektek').doc(id).set(body); }
         catch (e) { toast(e && e.code === 'quota_exceeded' ? 'Betelt a tárhely, törölj régi projekteket.' : 'Nem sikerült menteni. Lehet, hogy csak olvasási jogod van.'); throw e; }
+      } else if (this.remote) {
+        this._local(kind, (list) => { const o = list.filter((x) => x.id !== id); o.unshift(clone(obj)); return o; });
+        try { await this._post({ action: 'save', kind, id, data: body }); }
+        catch (e) { toast('Nem sikerült menteni a közös táblázatba. Ellenőrizd a netkapcsolatot.'); throw e; }
       } else {
         const list = kind === 'tpl' ? this.tpls : this.projs;
         const i = list.findIndex((x) => x.id === id); if (i >= 0) list[i] = clone(obj); else list.unshift(clone(obj));
@@ -307,6 +361,7 @@ td.r, th.r { text-align: right; }
     },
     async remove(kind, id) {
       if (this.db) { await this.db.collection(kind === 'tpl' ? 'termektipusok' : 'projektek').doc(id).delete(); }
+      else if (this.remote) { this._local(kind, (list) => list.filter((x) => x.id !== id)); await this._post({ action: 'remove', kind, id }); }
       else { const k = kind === 'tpl' ? 'tpls' : 'projs'; this[k] = this[k].filter((x) => x.id !== id); this._lset(kind, this[k]); this.onChange(kind); }
     },
   };
