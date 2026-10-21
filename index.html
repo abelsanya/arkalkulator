@@ -531,8 +531,11 @@ td.r, th.r { text-align: right; }
     }));
     const mat = matCost * mul;
     const svc = (p.szolg || []).reduce((a, s) => a + svcQty(s, kg) * num(s.price), 0);
-    const net = mat + svc, gross = net * (1 + vat / 100);
-    return { n, matCost, mat, svc, net, vatAmt: net * vat / 100, gross, unitNet: net / n, unitGross: gross / n, kg, noKg, m, vat, mul };
+    // haszon a teljes önköltségre (anyag + munkadíj), alapból 30%
+    const h = p.haszon == null ? 30 : num(p.haszon), hmul = 1 + h / 100;
+    const base = mat + svc, profit = base * h / 100;
+    const net = base + profit, gross = net * (1 + vat / 100);
+    return { n, matCost, mat, svc, base, h, hmul, profit, net, vatAmt: net * vat / 100, gross, unitNet: net / n, unitGross: gross / n, kg, noKg, m, vat, mul };
   }
 
   // Becsült festés és munkadíj, külön sorban: a felhasznált anyag nettó súlya × 1100 Ft/kg.
@@ -663,6 +666,7 @@ td.r, th.r { text-align: right; }
         <h2 id="h-sum">Összesítő</h2>
         <div class="settings">
           <div><label for="margin">Árrés az anyagra (%)</label><input type="text" id="margin" inputmode="decimal" value="${esc(p.margin)}"></div>
+          <div><label for="haszon">Haszon (%)</label><input type="text" id="haszon" inputmode="decimal" value="${esc(p.haszon == null ? '30' : p.haszon)}"></div>
           <div><label for="vat">ÁFA (%)</label><input type="text" id="vat" inputmode="decimal" value="${esc(p.vat)}"></div>
         </div>
         <div class="totals" id="totals">${totalsHTML(t)}</div>
@@ -670,7 +674,7 @@ td.r, th.r { text-align: right; }
           <button class="primary" id="copyTable">Táblázat másolása Wordbe</button>
           <button id="copyTotal">Csak a végösszeg másolása</button>
         </div>
-        <div class="hint">Az árak a Timár Vasker, a tetolemez.hu és a metallonova.hu webáruház bruttó árai, a nettó ár ezekből számolt (÷ 1,27). A kg-os anyagok átváltása és a súly elméleti tömeggel (acél 7,85 kg/dm³, szabványos szelvénytáblák) számolt, a lekerekített sarkok miatt a valós súly pár százalékkal kevesebb lehet.</div>
+        <div class="hint">Az árak a Timár Vasker, a tetolemez.hu és a metallonova.hu webáruház bruttó árai, a nettó ár ezekből számolt (÷ 1,27). A Wordbe másolt táblázat soraiban az árak már a haszonnal növelve szerepelnek, külön haszon-sor nélkül. A kg-os anyagok átváltása és a súly elméleti tömeggel (acél 7,85 kg/dm³, szabványos szelvénytáblák) számolt, a lekerekített sarkok miatt a valós súly pár százalékkal kevesebb lehet.</div>
       </section>
       </div>`;
     bindProject();
@@ -683,6 +687,8 @@ td.r, th.r { text-align: right; }
       ${t.n > 1 ? `<div class="line muted"><span>1 db termék anyagsúlya</span><span class="num">${fmt2.format(t.kg / t.n)} kg</span></div>` : ''}
       ${t.noKg ? `<div class="line muted"><span>${t.noKg} tétel súlya nem ismert, ez nincs benne</span><span></span></div>` : ''}
       <div class="line"><span>Munkadíj és szolgáltatások (nettó)</span><span class="num">${ft(t.svc)}</span></div>
+      <div class="line muted"><span>Önköltség (anyag + munkadíj, nettó)</span><span class="num">${ft(t.base)}</span></div>
+      <div class="line"><span>Haszon ${fmt2.format(t.h)}%</span><span class="num">${ft(t.profit)}</span></div>
       <div class="line"><span>Nettó összesen</span><span class="num">${ft(t.net)}</span></div>
       <div class="line"><span>ÁFA ${fmt2.format(t.vat)}%</span><span class="num">${ft(t.vatAmt)}</span></div>
       <div class="line big"><span>Bruttó összesen${t.n > 1 ? ` (${t.n} db)` : ''}</span><span class="num">${ft(t.gross)}</span></div>
@@ -731,7 +737,7 @@ td.r, th.r { text-align: right; }
     v.querySelectorAll('[data-pf]').forEach((el) => el.addEventListener('input', () => { cur[el.dataset.pf] = el.value; if (el.dataset.pf === 'nev') $('title').textContent = el.value; touch(); }));
     $('addPart').addEventListener('click', () => { cur.reszek.push({ id: uid(), nev: 'Új alkatrész', sorok: [] }); touch(); render(); });
     $('pDb').addEventListener('input', (e) => { cur.db = e.target.value; touch(); v.querySelectorAll('[data-slot]').forEach((n) => { const f = findSlot(n); if (f.l) refreshSlot(n, f.l); }); refreshTotals(); });
-    ['margin', 'vat'].forEach((k) => $(k).addEventListener('input', (e) => { cur[k] = e.target.value; touch(); v.querySelectorAll('[data-slot]').forEach((n) => { const f = findSlot(n); if (f.l && f.l.url) refreshSlot(n, f.l); }); refreshTotals(); }));
+    ['margin', 'vat', 'haszon'].forEach((k) => $(k).addEventListener('input', (e) => { cur[k] = e.target.value; touch(); v.querySelectorAll('[data-slot]').forEach((n) => { const f = findSlot(n); if (f.l && f.l.url) refreshSlot(n, f.l); }); refreshTotals(); }));
 
     $('szabBtn').addEventListener('click', () => importSzabas($('szabText').value));
     $('rajzFile').addEventListener('change', async (e) => { const f = e.target.files[0]; if (f) importRajz(decodeText(await f.arrayBuffer())); e.target.value = ''; });
@@ -944,14 +950,14 @@ td.r, th.r { text-align: right; }
       if (!ls.length) return;
       hrows.push(`<tr><td ${td} colspan="4"><b>${esc(part.nev)}</b></td></tr>`); trows.push(part.nev);
       ls.forEach(([l, c]) => {
-        const r = [c.it.n, fmt2.format(c.r.bill) + ' ' + c.r.billUnit + (c.r.wordNote ? ` (${c.r.wordNote})` : ''), ft(c.netPer * t.mul), ft(c.net * t.mul)];
+        const r = [c.it.n, fmt2.format(c.r.bill) + ' ' + c.r.billUnit + (c.r.wordNote ? ` (${c.r.wordNote})` : ''), ft(c.netPer * t.mul * t.hmul), ft(c.net * t.mul * t.hmul)];
         hrows.push(`<tr><td ${td}>${esc(r[0])}</td><td ${td}>${esc(r[1])}</td><td ${tdr}>${r[2]}</td><td ${tdr}>${r[3]}</td></tr>`); trows.push(r.join('\t'));
       });
     });
     const svcs = cur.szolg.filter((s) => s.name || num(s.price));
     if (svcs.length) {
       hrows.push(`<tr><td ${td} colspan="4"><b>Munkadíj és szolgáltatások</b></td></tr>`); trows.push('Munkadíj és szolgáltatások');
-      svcs.forEach((s) => { const q = svcQty(s, t.kg); const r = [s.name, fmt2.format(q) + ' ' + s.unit, ft(num(s.price)), ft(q * num(s.price))]; hrows.push(`<tr><td ${td}>${esc(r[0])}</td><td ${td}>${esc(r[1])}</td><td ${tdr}>${r[2]}</td><td ${tdr}>${r[3]}</td></tr>`); trows.push(r.join('\t')); });
+      svcs.forEach((s) => { const q = svcQty(s, t.kg); const r = [s.name.replace(/\s*\(nettó súly × .*becsült\)/, ''), fmt2.format(q) + ' ' + s.unit, ft(num(s.price) * t.hmul), ft(q * num(s.price) * t.hmul)]; hrows.push(`<tr><td ${td}>${esc(r[0])}</td><td ${td}>${esc(r[1])}</td><td ${tdr}>${r[2]}</td><td ${tdr}>${r[3]}</td></tr>`); trows.push(r.join('\t')); });
     }
     const foot = [['Nettó összesen' + (t.n > 1 ? ` (${t.n} db)` : ''), ft(t.net)], [`ÁFA ${fmt2.format(t.vat)}%`, ft(t.vatAmt)], ['Bruttó összesen' + (t.n > 1 ? ` (${t.n} db)` : ''), ft(t.gross)]];
     if (t.n > 1) foot.push(['Egységár (1 db) nettó', ft(t.unitNet)], ['Egységár (1 db) bruttó', ft(t.unitGross)]);
