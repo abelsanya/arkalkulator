@@ -535,14 +535,22 @@ td.r, th.r { text-align: right; }
     return { n, matCost, mat, svc, net, vatAmt: net * vat / 100, gross, unitNet: net / n, unitGross: gross / n, kg, noKg, m, vat, mul };
   }
 
-  // Becsült munkadíj és festés: a felhasznált anyag nettó súlya × 1100 Ft/kg. A mennyiség követi a súlyt, amíg kézzel át nem írják.
+  // Becsült festés és munkadíj, külön sorban: a felhasznált anyag nettó súlya × 1100 Ft/kg.
+  // A mennyiség követi a súlyt, amíg kézzel át nem írják.
   const MUNKA_FT_KG = 1100;
+  const AUTO_SVC = [['festes', 'Festés'], ['munkadij', 'Munkadíj']];
   const svcQty = (s, kg) => (s.auto ? Math.round(kg * 10) / 10 : num(s.qty));
   function ensureMunka(p) {
-    if (p.noAutoMunka || (p.szolg || []).some((s) => s.autoKind === 'munka')) return false;
     p.szolg = p.szolg || [];
-    p.szolg.unshift({ id: uid(), name: `Munkadíj és festés (nettó súly × ${fmt.format(MUNKA_FT_KG)} Ft, becsült)`, qty: '', unit: 'kg', price: String(MUNKA_FT_KG), auto: true, autoKind: 'munka' });
-    return true;
+    const before = JSON.stringify(p.szolg);
+    // a korábbi, összevont „Munkadíj és festés” sor helyett két sor jön, ha még nem írták át
+    if (p.noAutoMunka) { p.noAuto = { festes: true, munkadij: true }; delete p.noAutoMunka; }
+    p.szolg = p.szolg.filter((s) => !(s.autoKind === 'munka' && s.auto));
+    AUTO_SVC.slice().reverse().forEach(([kind, name]) => {
+      if ((p.noAuto || {})[kind] || p.szolg.some((s) => s.autoKind === kind)) return;
+      p.szolg.unshift({ id: uid(), name: `${name} (nettó súly × ${fmt.format(MUNKA_FT_KG)} Ft, becsült)`, qty: '', unit: 'kg', price: String(MUNKA_FT_KG), auto: true, autoKind: kind });
+    });
+    return JSON.stringify(p.szolg) !== before;
   }
   function slotNote(c) {
     if (!c || !c.q) return '';
@@ -749,7 +757,7 @@ td.r, th.r { text-align: right; }
         return;
       }
       if (b.dataset.p) { cur.szolg.push({ id: uid(), name: b.dataset.p === 'Egyéb' ? '' : b.dataset.p, qty: '1', unit: b.dataset.u, price: '' }); touch(); render(); const s = cur.szolg[cur.szolg.length - 1]; $(b.dataset.p === 'Egyéb' ? 'sn-' + s.id : 'sp-' + s.id)?.focus(); return; }
-      if (b.dataset.sdel) { if (cur.szolg.some((x) => x.id === b.dataset.sdel && x.autoKind)) cur.noAutoMunka = true; cur.szolg = cur.szolg.filter((x) => x.id !== b.dataset.sdel); touch(); render(); return; }
+      if (b.dataset.sdel) { const ak = (cur.szolg.find((x) => x.id === b.dataset.sdel) || {}).autoKind; if (ak) cur.noAuto = { ...(cur.noAuto || {}), [ak]: true }; cur.szolg = cur.szolg.filter((x) => x.id !== b.dataset.sdel); touch(); render(); return; }
       if (act === 'pick') { const { l } = findSlot(b); picker = picker && picker.slotId === l.id ? null : { slotId: l.id, q: '' }; render(); return; }
       if (act === 'closepick') { picker = null; render(); return; }
       if (act === 'del') { const { part, l } = findSlot(b); part.sorok = part.sorok.filter((x) => x.id !== l.id); touch(); render(); return; }
