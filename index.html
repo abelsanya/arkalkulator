@@ -661,6 +661,9 @@ td.r, th.r { text-align: right; }
   function totalsHTML(t) {
     return `<div class="line muted"><span>Anyag beszerzési ára (nettó)</span><span class="num">${ft(t.matCost)}</span></div>
       <div class="line"><span>Anyag (nettó, ${fmt2.format(t.m)}% árréssel)</span><span class="num">${ft(t.mat)}</span></div>
+      <div class="line muted"><span>Felhasznált anyag nettó súlya${t.n > 1 ? ` (${t.n} db)` : ''}</span><span class="num">${fmt2.format(t.kg)} kg</span></div>
+      ${t.n > 1 ? `<div class="line muted"><span>1 db termék anyagsúlya</span><span class="num">${fmt2.format(t.kg / t.n)} kg</span></div>` : ''}
+      ${t.noKg ? `<div class="line muted"><span>${t.noKg} tétel súlya nem ismert, ez nincs benne</span><span></span></div>` : ''}
       <div class="line"><span>Munkadíj és szolgáltatások (nettó)</span><span class="num">${ft(t.svc)}</span></div>
       <div class="line"><span>Nettó összesen</span><span class="num">${ft(t.net)}</span></div>
       <div class="line"><span>ÁFA ${fmt2.format(t.vat)}%</span><span class="num">${ft(t.vatAmt)}</span></div>
@@ -668,10 +671,7 @@ td.r, th.r { text-align: right; }
       <div class="unitbox">
         <div class="line big"><span>Egységár (1 db) nettó</span><span class="num">${ft(t.unitNet)}</span></div>
         <div class="line"><span>Egységár (1 db) bruttó</span><span class="num">${ft(t.unitGross)}</span></div>
-      </div>
-      <div class="line"><span>Felhasznált anyag nettó súlya${t.n > 1 ? ` (${t.n} db)` : ''}</span><span class="num">${fmt2.format(t.kg)} kg</span></div>
-      ${t.n > 1 ? `<div class="line muted"><span>1 db termék anyagsúlya</span><span class="num">${fmt2.format(t.kg / t.n)} kg</span></div>` : ''}
-      ${t.noKg ? `<div class="line muted"><span>${t.noKg} tétel súlya nem ismert, ez nincs benne</span><span></span></div>` : ''}`;
+      </div>`;
   }
   const PRESETS = [['Munkadíj', 'óra'], ['Vágás', 'vágás'], ['Hegesztés', 'óra'], ['Festés', 'm²'], ['Szállítás', 'alkalom'], ['Egyéb', 'db']];
 
