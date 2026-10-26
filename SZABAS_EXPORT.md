@@ -1,6 +1,6 @@
 # Szabásprogram → árajánlat-kalkulátor export
 
-Ez a leírás a **Konténer lemezszabás kalkulátor** (asztali program) fejlesztéséhez készült. A program egy új gombbal (**„Export árajánlathoz”**) JSON-fájlt ment. Az Acél árkalkulátor ezt a fájlt be tudja tölteni: a projekt Anyagok részén a „Lemez betöltése a szabás-számításból” sávban kell az „Exportfájl betöltése…” gombra kattintani.
+Ez a leírás a **Konténer lemezszabás kalkulátor** (asztali program) fejlesztéséhez készült. A program egy új gombbal (**„Export árajánlathoz”**) JSON-fájlt ment. Az Árkalkulátor ezt a fájlt be tudja tölteni: a projekt Anyagok részén a „Lemez betöltése a szabás-számításból” sávban kell az „Exportfájl betöltése…” gombra kattintani.
 
 ## A fájl formája (UTF-8 JSON, kiterjesztése .json)
 

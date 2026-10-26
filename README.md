@@ -1,4 +1,4 @@
-# Acél árkalkulátor
+# Árkalkulátor
 
 Árajánlat-kalkulátor a Tímár Vasker, tetolemez.hu és metallonova.hu árai alapján.
 
