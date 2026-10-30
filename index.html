@@ -68,6 +68,8 @@ button.small { font-size: 13px; padding: 4px 10px; }
 .hint { color: var(--muted); font-size: 13px; }
 .banner { background: var(--warn-soft); color: var(--warn); border-radius: 6px; padding: 8px 10px; font-size: 13px; }
 .toast { color: var(--accent); font-size: 13px; min-height: 1.2em; }
+a { color: var(--accent); }
+.xfer { background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 8px; padding: 10px 12px; display: grid; gap: 8px; font-size: 14px; }
 
 /* projektlista */
 .plist { display: grid; }
@@ -148,7 +150,7 @@ td.r, th.r { text-align: right; }
 <div class="wrap">
   <header>
     <h1 id="title">Árkalkulátor</h1>
-    <div class="meta" id="meta">Árlista betöltése…</div>
+    <div class="meta"><span id="meta">Árlista betöltése…</span> · <a href="szabas.html">Lemezszabás →</a></div>
   </header>
   <div class="banner" id="localBanner" hidden>A projektek és terméktípusok ebben a böngészőben tárolódnak, más gépen vagy böngészőben nem látszanak.</div>
   <main id="view"></main>
@@ -433,8 +435,10 @@ td.r, th.r { text-align: right; }
     const tpls = Store.tpls.slice().sort((a, b) => a.nev.localeCompare(b.nev, 'hu'));
     const q = norm(homeQ);
     const projs = Store.projs.filter((p) => !q || norm(p.nev + ' ' + (p.termekNev || '') + ' ' + (p.leiras || '')).includes(q));
+    const xf = xferGet();
     $('view').innerHTML = `
       <div style="display:grid;gap:18px">
+      ${xf ? `<div class="xfer">${xferText(xf)}<div class="hint">Hozz létre új projektet, vagy nyiss meg egy meglévőt, és ott töltsd be.</div><div class="actions"><button class="small" id="xferDrop">Elvetés</button></div></div>` : ''}
       <section class="panel" aria-labelledby="h-new">
         <h2 id="h-new">Új projekt</h2>
         ${tpls.length ? '' : '<div class="hint">Még nincs terméktípus. Előbb hozz létre egyet a „Terméktípusok szerkesztése” gombbal.</div>'}
@@ -459,6 +463,7 @@ td.r, th.r { text-align: right; }
       </section>
       </div>`;
     $('newForm').addEventListener('submit', (e) => { e.preventDefault(); createProject(); });
+    if (xf) { if (!$('nName').value && xf.projekt) $('nName').value = xf.projekt; $('xferDrop').addEventListener('click', () => { xferClear(); renderHome(); }); }
     $('toTpl').addEventListener('click', () => go({ view: 'templates' }));
     $('homeQ').addEventListener('input', (e) => { homeQ = e.target.value; const pos = e.target.selectionStart; renderHome(); const el = $('homeQ'); el.focus(); el.setSelectionRange(pos, pos); });
     $('view').querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => go({ view: 'project', id: b.dataset.open })));
@@ -635,6 +640,7 @@ td.r, th.r { text-align: right; }
           <div class="hint">A ZWCAD-ben a tételjegyzék-táblát exportáld CSV-be (oszlopok: Poz., Alkatrész, Anyag, Hossz / méret, Db), és töltsd be ide. A rúdanyagokat darabolva, egész szálra számolja; a lemezeket m²-ben. A rajz egy termékre szól, a darabszámmal szorzódik. Újratöltéskor a korábban betöltött rajz-sorokat lecseréli.</div>
           <div class="row" style="align-items:center;gap:8px;margin-top:6px"><label class="small" style="cursor:pointer" for="rajzFile"><span class="small" style="border:1px solid var(--line);border-radius:6px;padding:6px 10px;display:inline-block">Anyaglista (CSV) betöltése…</span></label><input type="file" id="rajzFile" accept=".csv,.txt,text/csv,text/plain" style="position:absolute;left:-9999px"></div>
         </details>
+        ${xferGet() ? `<div class="xfer" id="xferBox">${xferText(xferGet())}<div class="actions"><button class="small primary" id="xferLoad">Betöltés ebbe a projektbe</button><button class="small" id="xferDrop">Elvetés</button></div></div>` : ''}
         <details class="szabas"><summary>Lemez betöltése a szabás-számításból</summary>
           <div class="hint">Töltsd be a szabásprogram exportfájlját (.json), vagy másold ide az eredményét a „Felhasznált lemezek száma” résztől. Ha a fájlban nincs vastagság, előbb a Lemez sorban válaszd ki a lemezt. A táblák száma a teljes rendelésre szól, nem szorzódik a darabszámmal.</div>
           <div class="row" style="align-items:center;gap:8px;margin-top:6px"><label class="small" style="cursor:pointer" for="szabFile"><span class="small" style="border:1px solid var(--line);border-radius:6px;padding:6px 10px;display:inline-block">Exportfájl betöltése…</span></label><input type="file" id="szabFile" accept=".json,.txt,application/json,text/plain" style="position:absolute;left:-9999px"><span class="sub">vagy beillesztés:</span></div>
@@ -740,6 +746,10 @@ td.r, th.r { text-align: right; }
     ['margin', 'vat', 'haszon'].forEach((k) => $(k).addEventListener('input', (e) => { cur[k] = e.target.value; touch(); v.querySelectorAll('[data-slot]').forEach((n) => { const f = findSlot(n); if (f.l && f.l.url) refreshSlot(n, f.l); }); refreshTotals(); }));
 
     $('szabBtn').addEventListener('click', () => importSzabas($('szabText').value));
+    if ($('xferBox')) {
+      $('xferLoad').addEventListener('click', () => { const x = xferGet(); if (x && importSzabas(JSON.stringify(x))) { xferClear(); render(); } });
+      $('xferDrop').addEventListener('click', () => { xferClear(); render(); });
+    }
     $('rajzFile').addEventListener('change', async (e) => { const f = e.target.files[0]; if (f) importRajz(decodeText(await f.arrayBuffer())); e.target.value = ''; });
     $('szabFile').addEventListener('change', async (e) => { const f = e.target.files[0]; if (f) importSzabas(await f.text()); e.target.value = ''; });
     $('copyTable').addEventListener('click', copyTable);
@@ -806,47 +816,67 @@ td.r, th.r { text-align: right; }
     let j = null; try { j = JSON.parse(txt); } catch (e) {}
     if (j && Array.isArray(j.tablak)) {
       const darab = Array.isArray(j.termekek) ? j.termekek.reduce((a, t) => a + (+t.darab || 0), 0) : +j.darab || 0;
-      return { sheets: j.tablak.map((t) => ({ n: +t.db, w: +t.szel, h: +t.hossz })).filter((t) => t.n && t.w && t.h),
+      // több vastagságnál a vastagság táblánként szerepel
+      return { sheets: j.tablak.map((t) => ({ n: +t.db, w: +t.szel, h: +t.hossz, t: num(t.vastagsag_mm) })).filter((t) => t.n && t.w && t.h),
         used: j.beepulo_terulet_m2 != null ? String(j.beepulo_terulet_m2) : null, darab, t: num(j.vastagsag_mm), anyag: j.anyag || '', nev: j.projekt || '' };
     }
-    return { sheets: [...txt.matchAll(/(\d+)\s*db\s+(\d+)\s*[x×]\s*(\d+)\s*mm/gi)].map((m) => ({ n: +m[1], w: +m[2], h: +m[3] })),
+    return { sheets: [...txt.matchAll(/(\d+)\s*db\s+(\d+)\s*[x×]\s*(\d+)\s*mm(?:\s*\(([\d.,]+)\s*mm\))?/gi)].map((m) => ({ n: +m[1], w: +m[2], h: +m[3], t: num(m[4]) })),
       used: (txt.match(/Beépülő terület:\s*([\d.,]+)/i) || [])[1], darab: 0, t: 0, anyag: '' };
   }
   function importSzabas(txt) {
     const z = parseSzabas(txt), sheets = z.sheets, used = z.used;
-    if (!sheets.length) { toast('Nem találtam táblát (pl. „4 db 1000 x 2000 mm”, vagy a JSON „tablak” listája).'); return; }
+    if (!sheets.length) { toast('Nem találtam táblát (pl. „4 db 1000 x 2000 mm”, vagy a JSON „tablak” listája).'); return false; }
     // a cél: az első Lemez sor; az anyag és a vastagság a kiválasztott lemezből, vagy a fájlból jön
     let part = null, line = null;
     for (const r of cur.reszek) { const l = r.sorok.find((x) => x.url && (byUrl.get(x.url) || x.snap)?.c === 'Lemez'); if (l) { part = r; line = l; break; } }
     if (!line) for (const r of cur.reszek) { const l = r.sorok.find((x) => !x.url && x.kat === 'Lemez'); if (l) { part = r; line = l; break; } }
-    let base = line && line.url ? byUrl.get(line.url) || line.snap : null;
-    if (z.t && (!base || num((base.m || '').split('x')[0]) !== z.t)) {
-      // a fájl vastagsága dönt; az alkategória a fájl anyag mezőjéből, a sablonból, vagy hidegen hengerelt
-      const hint = norm(z.anyag || (base && base.s) || (line && line.al) || 'Hidegen hengerelt');
-      const cands = DATA.items.filter((x) => x.c === 'Lemez' && num((x.m || '').split('x')[0]) === z.t);
-      base = cands.find((x) => norm(x.s).includes(hint) || hint.includes(norm(x.s))) || cands.find((x) => /hidegen/i.test(x.s)) || cands[0] || null;
-      if (!base) { toast(`Nincs ${fmt2.format(z.t)} mm-es lemez az árlistában.`); return; }
+    const chosen = line && line.url ? byUrl.get(line.url) || line.snap : null;
+    const thickOf = (it) => num((it.m || '').split('x')[0]);
+    // a fájl vastagsága dönt; az alkategória a fájl anyag mezőjéből, a sablonból, vagy hidegen hengerelt
+    const baseFor = (t) => {
+      if (!t || (chosen && thickOf(chosen) === t)) return chosen;
+      const hint = norm(z.anyag || (chosen && chosen.s) || (line && line.al) || 'Hidegen hengerelt');
+      const cands = DATA.items.filter((x) => x.c === 'Lemez' && thickOf(x) === t);
+      return cands.find((x) => norm(x.s).includes(hint) || hint.includes(norm(x.s))) || cands.find((x) => /hidegen/i.test(x.s)) || cands[0] || null;
+    };
+    const find = (base, w, h) => { const t = thickOf(base); return DATA.items.find((x) => x.c === base.c && x.s === base.s && (x.g || '') === (base.g || '') && (() => { const n = (x.m || '').split('x').map(num); return n.length >= 3 && n[0] === t && ((n[1] === w && n[2] === h) || (n[1] === h && n[2] === w)); })()); };
+    const items = [];
+    for (const sh of sheets) {
+      const t = sh.t || z.t, base = baseFor(t);
+      if (!base) { toast(t ? `Nincs ${fmt2.format(t)} mm-es lemez az árlistában.` : 'Előbb válaszd ki a lemezt (vastagságot) a Lemez sorban, utána olvasd be a szabást.'); return false; }
+      const it = find(base, sh.w, sh.h);
+      if (!it) { toast(`${base.s} ${fmt2.format(thickOf(base))} mm-ben nincs ilyen tábla az árlistában: ${sh.w}x${sh.h}`); return false; }
+      items.push({ sh, it });
     }
-    if (!base) { toast('Előbb válaszd ki a lemezt (vastagságot) a Lemez sorban, utána olvasd be a szabást.'); return; }
     if (!line) { part = cur.reszek[0]; line = { id: uid(), cimke: 'Lemez', kat: 'Lemez', al: '' }; part.sorok.unshift(line); }
     if (z.darab) cur.db = String(z.darab);
-    const t = num((base.m || '').split('x')[0]);
-    const find = (w, h) => DATA.items.find((x) => x.c === base.c && x.s === base.s && (x.g || '') === (base.g || '') && (() => { const n = (x.m || '').split('x').map(num); return n.length >= 3 && n[0] === t && ((n[1] === w && n[2] === h) || (n[1] === h && n[2] === w)); })());
-    const missing = sheets.filter((sh) => !find(sh.w, sh.h));
-    if (missing.length) { toast(`${base.s} ${fmt2.format(t)} mm-ben nincs ilyen tábla az árlistában: ${missing.map((m) => m.w + 'x' + m.h).join(', ')}`); return; }
     const totalArea = sheets.reduce((a, sh) => a + sh.n * sh.w * sh.h / 1e6, 0);
     const netAll = used ? num(used) : null;
     // a korábban beolvasott szabás-sorokat lecseréljük
     part.sorok = part.sorok.filter((x) => x === line || !x.szabas);
-    sheets.forEach((sh, i) => {
-      const it = find(sh.w, sh.h); const { _k, ...snap } = it;
+    items.forEach(({ sh, it }, i) => {
+      const { _k, ...snap } = it;
       const l = i === 0 ? line : { id: uid(), cimke: line.cimke, kat: line.kat, al: line.al, szabas: true };
       Object.assign(l, { url: it.url, snap, unit: 'tábla', qty: String(sh.n), fix: true, netM2: netAll ? netAll * (sh.n * sh.w * sh.h / 1e6) / totalArea : null });
       if (i > 0) part.sorok.splice(part.sorok.indexOf(line) + i, 0, l);
     });
     touch(); render();
     if ($('szabText')) $('szabText').value = '';
-    toast(`Beolvasva${z.darab ? `, darabszám ${z.darab}` : ''}: ${sheets.map((sh) => sh.n + ' tábla ' + sh.w + 'x' + sh.h).join(', ')}${netAll ? `, beépülő ${fmt2.format(netAll)} m²` : ''}.`);
+    toast(`Beolvasva${z.darab ? `, darabszám ${z.darab}` : ''}: ${items.map(({ sh, it }) => sh.n + ' tábla ' + sh.w + 'x' + sh.h + (sheets.some((x) => x.t) ? ' (' + fmt2.format(thickOf(it)) + ' mm)' : '')).join(', ')}${netAll ? `, beépülő ${fmt2.format(netAll)} m²` : ''}.`);
+    return true;
+  }
+
+  // ---------- átvétel a szabásprogram webes változatából (szabas.html) ----------
+  // A szabas.html az „Átvitel az Árkalkulátorba” gombbal ide teszi az exportot (ugyanaz a JSON, mint a fájl)
+  const XFER_KEY = 'acelkalk-szabas-atvitel';
+  function xferGet() { try { const x = JSON.parse(localStorage.getItem(XFER_KEY)); return x && Array.isArray(x.tablak) ? x : null; } catch (e) { return null; } }
+  function xferClear() { try { localStorage.removeItem(XFER_KEY); } catch (e) {} }
+  function xferText(x) {
+    const db = x.tablak.reduce((a, t) => a + (+t.db || 0), 0);
+    const tab = x.tablak.map((t) => `${t.db} × ${t.szel}x${t.hossz}${t.vastagsag_mm ? ` (${fmt2.format(t.vastagsag_mm)} mm)` : ''}`).join(', ');
+    const darab = Array.isArray(x.termekek) ? x.termekek.reduce((a, t) => a + (+t.darab || 0), 0) : 0;
+    return `<div><b>Átvett szabás-eredmény: ${esc(x.projekt || '')}</b> <span class="sub">${esc(fmtDate(x.atadva))}</span></div>
+      <div>${db} tábla: ${esc(tab)}${darab ? ` · ${darab} db termék` : ''}${x.beepulo_terulet_m2 != null ? ` · beépülő ${fmt2.format(x.beepulo_terulet_m2)} m²` : ''}${x.suly_kg ? ` · ${fmt2.format(x.suly_kg)} kg` : ''}</div>`;
   }
 
   // ---------- rajz anyaglistájának (CSV) beolvasása ----------
