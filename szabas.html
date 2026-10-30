@@ -1,0 +1,716 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Konténer lemezszabás</title>
+<meta name="description" content="Konténer lemezszabás kalkulátor – a táblák optimális kiosztása, átvitel az Árkalkulátorba.">
+<link rel="manifest" href="szabas.webmanifest">
+<link rel="apple-touch-icon" href="szabas/ikon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Szabás">
+<meta name="theme-color" content="#1d5e86">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Ugyanaz a megjelenés, mint az Árkalkulátoré; telefonra egy hasábos, kártyás elrendezés */
+:root {
+  --bg: #eef1f3;
+  --panel: #ffffff;
+  --ink: #1b2329;
+  --muted: #5c6a74;
+  --line: #d3dade;
+  --accent: #1d5e86;
+  --accent-ink: #ffffff;
+  --accent-soft: #e1edf5;
+  --warn: #9a5b00;
+  --warn-soft: #fbf0dc;
+  --danger: #a3302a;
+  --danger-soft: #f8e3e1;
+  --piece: #d7e6f0;
+  --piece-line: #1d5e86;
+  --piece-res: #f3e2bf;
+  --piece-res-line: #9a5b00;
+  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", Roboto, Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12171b; --panel: #1a2126; --ink: #e4e9ec; --muted: #94a3ad; --line: #2e3940;
+    --accent: #6fb3dd; --accent-ink: #0d1a22; --accent-soft: #1d3342; --warn: #e7b25a; --warn-soft: #34291a; --danger: #ec8a84; --danger-soft: #3a2220;
+    --piece: #1f3a4d; --piece-line: #6fb3dd; --piece-res: #4a3a1c; --piece-res-line: #e7b25a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12171b; --panel: #1a2126; --ink: #e4e9ec; --muted: #94a3ad; --line: #2e3940;
+  --accent: #6fb3dd; --accent-ink: #0d1a22; --accent-soft: #1d3342; --warn: #e7b25a; --warn-soft: #34291a; --danger: #ec8a84; --danger-soft: #3a2220;
+  --piece: #1f3a4d; --piece-line: #6fb3dd; --piece-res: #4a3a1c; --piece-res-line: #e7b25a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-top: max(20px, env(safe-area-inset-top, 0px));
+  padding-bottom: max(48px, env(safe-area-inset-bottom, 0px));
+}
+.wrap { max-width: 1100px; margin: 0 auto; display: grid; gap: 18px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 20px; }
+h1 { font-family: var(--font-display); font-weight: 800; font-size: 26px; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--font-display); font-weight: 700; font-size: 18px; margin: 0; text-wrap: balance; }
+h3 { font-family: var(--font-display); font-weight: 700; font-size: 15px; margin: 0; }
+a { color: var(--accent); }
+.meta { color: var(--muted); font-size: 13px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+label, .lbl { font-size: 12px; color: var(--muted); letter-spacing: 0.03em; text-transform: uppercase; }
+input, select, button, textarea { font: inherit; color: inherit; }
+/* iOS: 16 px alatt a mezőre koppintva ráközelít */
+input[type="text"], select, textarea { font-size: 16px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; min-width: 0; }
+input[readonly] { color: var(--muted); border-style: dashed; }
+input:disabled { opacity: .45; }
+textarea { font-family: var(--font-mono); min-height: 110px; }
+input:focus-visible, select:focus-visible, button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button { cursor: pointer; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); padding: 9px 14px; min-height: 40px; }
+button:disabled { opacity: .5; cursor: default; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+button.ghost { border-color: transparent; background: transparent; color: var(--muted); padding: 6px 10px; }
+button.ghost:hover { color: var(--danger); }
+button.small { font-size: 14px; padding: 6px 12px; min-height: 36px; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.field { display: grid; gap: 4px; min-width: 0; flex: 1 1 150px; }
+.hint { color: var(--muted); font-size: 13px; }
+.banner { background: var(--warn-soft); color: var(--warn); border-radius: 6px; padding: 8px 10px; font-size: 13px; }
+.banner.err { background: var(--danger-soft); color: var(--danger); }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.check { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; color: var(--ink); text-transform: none; letter-spacing: 0; cursor: pointer; }
+.check input { width: 20px; height: 20px; margin: 2px 0 0; flex: none; accent-color: var(--accent); }
+.toast { position: fixed; left: 50%; bottom: max(16px, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 14px; border-radius: 8px; font-size: 14px; max-width: min(92vw, 520px); z-index: 50; box-shadow: 0 4px 16px rgb(0 0 0 / .2); }
+.toast[hidden] { display: none; }
+
+/* termékkártyák */
+.prod { border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: grid; gap: 10px; background: var(--panel); }
+.prod-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.prod-head input { font-family: var(--font-display); font-weight: 700; }
+.prod .grid3 { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, .8fr) minmax(0, .9fr); gap: 8px; }
+.dims { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 8px; }
+.dims input { font-family: var(--font-mono); text-align: right; }
+details > summary { cursor: pointer; font-weight: 600; font-size: 14px; padding: 4px 0; }
+.dxfsum { white-space: pre-wrap; font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+
+/* beállítások */
+.settings { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px 14px; }
+.settings > div { display: grid; gap: 4px; align-content: end; }
+.settings input { font-family: var(--font-mono); text-align: right; }
+
+/* eredmény */
+.progress { font-family: var(--font-mono); font-size: 14px; white-space: pre-wrap; }
+.result { font-family: var(--font-mono); font-size: 12px; white-space: pre; overflow-x: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px; margin: 0; max-height: 70vh; }
+.sheets { display: grid; gap: 14px; }
+.sheet h3 { font-size: 14px; margin-bottom: 4px; }
+.sheet svg { width: 100%; height: auto; display: block; background: var(--bg); border-radius: 4px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: -2px; margin-right: 4px; border: 1px solid; }
+
+/* rajzos méretmegadás (teljes képernyős ablak) */
+.modal { position: fixed; inset: 0; z-index: 40; background: var(--bg); overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: max(12px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px)); }
+.modal-in { max-width: 1000px; margin: 0 auto; display: grid; gap: 12px; padding-bottom: 90px; }
+.modal-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 41; background: var(--panel); border-top: 1px solid var(--line);
+  display: flex; gap: 10px; justify-content: flex-end; padding: 10px max(16px, env(safe-area-inset-right, 0px)) max(10px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+.modal-bar button { flex: 0 1 160px; }
+.skwrap { overflow-x: auto; border-radius: 8px; background: #222831; }
+.skwrap svg { display: block; width: 100%; min-width: 620px; height: auto; }
+.skwrap .inp { cursor: pointer; }
+.skinfo { white-space: pre-wrap; font-family: var(--font-mono); font-size: 13px; background: var(--warn-soft); color: var(--warn); border-radius: 6px; padding: 8px 10px; }
+.skfields { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px 14px; }
+.skf { display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: 8px; align-items: center; }
+.skf label { text-transform: none; letter-spacing: 0; font-size: 14px; color: var(--ink); }
+.skf input { font-family: var(--font-mono); text-align: right; font-weight: 600; }
+.skf.auto input { font-style: italic; color: var(--muted); }
+.skf.opt label::after { content: " (nem kötelező)"; color: var(--muted); font-size: 12px; }
+.skf.flash input { outline: 2px solid var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Konténer lemezszabás</h1>
+    <div class="meta"><a href="index.html">Árkalkulátor →</a></div>
+  </header>
+  <div class="banner" id="pyStatus">A számítóprogram betöltése… (első alkalommal kb. 15 MB, utána a böngésző megjegyzi)</div>
+
+  <section class="panel" aria-labelledby="h-prod">
+    <h2 id="h-prod">Gyártandó termékek</h2>
+    <div class="hint">Méretek mm-ben. A „Méretek rajz szerint” gombbal a műhelyrajz szerinti vázlaton adhatod meg őket.</div>
+    <div id="prods" style="display:grid;gap:12px"></div>
+    <div class="actions">
+      <button class="small" id="addProd">+ Termék</button>
+      <button class="small" id="addDxf">+ Egyéb alkatrész (DXF)</button>
+    </div>
+    <details>
+      <summary>Oldalméretek típusonként</summary>
+      <div class="hint" id="sideHelp"></div>
+    </details>
+  </section>
+
+  <section class="panel" aria-labelledby="h-set">
+    <h2 id="h-set">Beállítások</h2>
+    <div class="settings">
+      <div><label for="sKerf">Vágási rés (mm)</label><input type="text" id="sKerf" data-s="kerf" inputmode="numeric"></div>
+      <div><label for="sMinPct">Toldott rész min. (%)</label><input type="text" id="sMinPct" data-s="min_pct" inputmode="decimal"></div>
+      <div><label for="sTime">Keresési idő (mp)</label><input type="text" id="sTime" data-s="time" inputmode="decimal"></div>
+      <div><label for="sFlange">ABO perem (mm)</label><input type="text" id="sFlange" data-s="flange"></div>
+      <div><label for="sMargin">Széltávolság (mm)</label><input type="text" id="sMargin" data-s="margin" inputmode="decimal"></div>
+    </div>
+    <div class="hint">Toldott rész: a legkisebb alkatrész területének hány %-a lehet egy toldott rész (0–50). Keresési idő: ennyi ideig keres jobb kiosztást; a telefon egy szálon számol, ezért itt érdemes több időt adni, mint a gépen.</div>
+    <div style="display:grid;gap:10px">
+      <label class="check"><input type="checkbox" data-s="guillotine"> Csak egyenes végigvágás (táblaolló)</label>
+      <label class="check"><input type="checkbox" data-s="lasercut"> <span id="laserLbl">Lézeres vágás</span></label>
+      <label class="check"><input type="checkbox" data-s="weld"> Hegesztett toldás engedélyezése (maradékok felhasználása)</label>
+      <label class="check"><input type="checkbox" data-s="double"> Összeállítási varrat kétoldali (belül + kívül)</label>
+    </div>
+    <div class="field" style="max-width:420px"><label for="sMerge">Alja összehajlítása (kevesebb varrat)</label><select id="sMerge" data-s="merge"></select></div>
+  </section>
+
+  <section class="panel" aria-labelledby="h-mat">
+    <h2 id="h-mat">Táblaméretek (anyagolás)</h2>
+    <div class="hint">Soronként egy táblaméret, pl. <code>1250x2500</code>, vagy árral: <code>1250;2500;62000</code>. Megadható az anyag is, pl. <code>anyag: hidegen hengerelt</code>. A # utáni rész megjegyzés. Ugyanaz, mint az asztali program anyagolás.txt fájlja.</div>
+    <textarea id="material" spellcheck="false" aria-label="Táblaméretek"></textarea>
+    <div class="row" style="align-items:center">
+      <button class="small" id="matFileBtn">anyagolás.txt betöltése…</button>
+      <input type="file" id="matFile" accept=".txt,text/plain" hidden>
+      <span class="hint" id="matInfo"></span>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="h-calc">
+    <div class="row" style="justify-content:space-between;align-items:center">
+      <h2 id="h-calc">Számítás</h2>
+      <div class="actions">
+        <button class="primary" id="calcBtn" disabled>Optimalizált számítás</button>
+        <button id="cancelBtn" hidden>Megszakítás</button>
+      </div>
+    </div>
+    <div class="progress" id="progress" hidden></div>
+    <div id="resultBox" hidden style="display:grid;gap:12px">
+      <div class="banner" id="staleNote" hidden>Ez a legutóbbi számítás eredménye. A DXF exporthoz számold újra.</div>
+      <div class="actions">
+        <button class="primary" id="toArkalk">Átvitel az Árkalkulátorba</button>
+        <button class="small" id="dlQuote">Árajánlat-export (.json)</button>
+        <button class="small" id="dlDxf">DXF export</button>
+        <button class="small" id="dlLaser">Lézerre: alkatrészenként DXF (.zip)</button>
+      </div>
+      <details open>
+        <summary>Lemezek rajza</summary>
+        <div class="legend"><span><i style="background:var(--piece);border-color:var(--piece-line)"></i>alkatrész</span><span><i style="background:var(--piece-res);border-color:var(--piece-res-line)"></i>másik konténer táblájának maradékából</span></div>
+        <div class="sheets" id="sheets"></div>
+      </details>
+      <details>
+        <summary>Részletes eredmény (szöveg)</summary>
+        <pre class="result" id="resultText"></pre>
+        <button class="small" id="copyRes">Szöveg másolása</button>
+      </details>
+    </div>
+  </section>
+  <div class="meta" id="ver"></div>
+</div>
+
+<div class="modal" id="modal" hidden role="dialog" aria-modal="true" aria-labelledby="mTitle"></div>
+<div class="modal-bar" id="modalBar" hidden><button id="mCancel">Mégse</button><button class="primary" id="mOk">OK</button></div>
+<input type="file" id="dxfFile" accept=".dxf" hidden>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const uid = () => Math.random().toString(36).slice(2, 10);
+  const ASSET_VER = '1';
+  const KEY = 'szabas-allapot', KEY_RES = 'szabas-eredmeny', KEY_DXF = 'szabas-dxf-', KEY_XFER = 'acelkalk-szabas-atvitel';
+  const lget = (k) => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
+  const lset = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } };
+  const ldel = (k) => { try { localStorage.removeItem(k); } catch (e) {} };
+
+  let toastT = 0;
+  function toast(msg, ms = 4500) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, ms); }
+
+  // ================= Python worker =================
+  let worker = null, workerReady = false, seq = 0, busyCalc = false;
+  const pending = new Map();
+  let INFO = null;
+  function startWorker() {
+    workerReady = false;
+    worker = new Worker('szabas/worker.js?v=' + ASSET_VER);
+    worker.onmessage = (e) => {
+      const m = e.data;
+      if (m.type === 'status') { setStatus(m.msg); return; }
+      if (m.type === 'progress') { calcMsg = m.msg; showProgress(); return; }
+      if (m.type === 'ready') { workerReady = true; setStatus(''); onReady(); return; }
+      if (m.type === 'fatal') { setStatus('A számítóprogram nem tölthető be: ' + m.error + '. Ellenőrizd az internetkapcsolatot, és töltsd újra az oldalt.', true); return; }
+      if (m.type === 'result') { const p = pending.get(m.id); if (!p) return; pending.delete(m.id); m.ok ? p.res(m.result) : p.rej(new Error(m.error)); }
+    };
+    worker.onerror = (e) => setStatus('Hiba a számítóprogramban: ' + (e.message || e), true);
+  }
+  function call(op, args, transfer) {
+    return new Promise((res, rej) => { const id = ++seq; pending.set(id, { res, rej }); worker.postMessage({ id, op, args }, transfer || []); });
+  }
+  function setStatus(msg, err) {
+    const b = $('pyStatus');
+    if (!msg && workerReady) { b.hidden = true; return; }
+    if (!msg) return;
+    b.hidden = false; b.textContent = msg; b.classList.toggle('err', !!err);
+  }
+
+  // ================= állapot =================
+  const DEF_SET = { kerf: '0', min_pct: '40', time: '30', flange: '30x25', margin: '0', guillotine: false, lasercut: false, weld: true, double: false, merge: 0 };
+  const DEF_MAT = '# Táblaméretek (soronként egy), pl. árral: 1250;2500;62000\n1000x2000\n1250x2500\n1500x3000\nanyag: hidegen hengerelt\n';
+  const saved = lget(KEY) || {};
+  const S = {
+    rows: Array.isArray(saved.rows) && saved.rows.length ? saved.rows : [],
+    set: { ...DEF_SET, ...(saved.set || {}) },
+    material: typeof saved.material === 'string' ? saved.material : DEF_MAT,
+  };
+  // DXF rajzok: id → Uint8Array (a böngészőben is megmarad, ha belefér)
+  const dxfData = new Map();
+  for (const r of S.rows) if (r.dxf_id) {
+    const b64 = (() => { try { return localStorage.getItem(KEY_DXF + r.dxf_id); } catch (e) { return null; } })();
+    if (b64) dxfData.set(r.dxf_id, Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)));
+  }
+  let saveT = 0;
+  function save() { clearTimeout(saveT); saveT = setTimeout(() => lset(KEY, S), 300); }
+
+  const COLS = { 3: 'Alja szél.', 4: 'Alja hossz', 5: 'Hátlap szél.', 6: 'Hátlap mag.', 7: 'Homlok szél.', 8: 'Homlok mag.', 9: 'Oldal A', 10: 'Oldal B', 11: 'Oldal C' };
+  const OTHER = 'Egyéb (DXF)';
+  const newRow = (vals) => ({ id: uid(), name: `Termék ${S.rows.length + 1}`, type: 'Sittes', qty: '1', thick: '2', cells: {}, extras: {}, ...vals });
+
+  function flangeSum() {
+    const fl = S.set.flange.trim().split(/[xX×*; ]+/).filter(Boolean).map((t) => parseFloat(t.replace(',', '.')));
+    return fl.length === 2 && fl.every((x) => !isNaN(x)) ? fl[0] + fl[1] : (INFO ? INFO.default_flange[0] + INFO.default_flange[1] : 55);
+  }
+  const numOf = (s) => { const v = parseFloat(String(s ?? '').trim().replace(',', '.')); return isNaN(v) ? null : v; };
+  // ABO_A: a homloklap nettó magassága = a ferde él (abo_a_info)
+  function aboAFront(r) {
+    const a = numOf(r.cells[9]), b = numOf(r.cells[10]), c = numOf(r.cells[11]);
+    if (!(a > 0 && b > 0 && c > 0 && c < a)) return '= (ferde él)';
+    return '= ' + Math.hypot(a - c, b).toFixed(1).replace('.', ',');
+  }
+
+  // ================= termékek =================
+  function renderRows() {
+    const types = INFO ? INFO.types : ['Sittes', 'ABO_A', 'ABO_B', OTHER];
+    $('prods').innerHTML = S.rows.map((r) => {
+      const other = r.type === OTHER;
+      const help = INFO ? INFO.side_help[r.type] : ['', '', ''];
+      const at = r.type === 'Sittes' ? (r.extras.alja_thick || '') : '';
+      const dims = other ? '' : `<details${r.open ? ' open' : ''} data-det="${r.id}"><summary>Méretek (táblázat)</summary>
+        <div class="dims">${Object.entries(COLS).map(([c, lab]) => {
+          const ci = +c;
+          let attrs = '', val = r.cells[c] ?? '', title = '';
+          if (ci === 8 && r.type === 'ABO_A') { attrs = ' readonly'; val = aboAFront(r); title = 'ABO_A-nál a homloklap nettó magassága = a ferde oldalél hossza; a program számolja'; }
+          if (ci === 11 && r.type === 'Sittes') { attrs = ' disabled'; val = ''; }
+          if (ci >= 9) title = help[ci - 9];
+          return `<div class="field" style="flex:none"><label for="c${ci}-${r.id}">${esc(lab)}</label><input type="text" id="c${ci}-${r.id}" data-cell="${ci}" inputmode="decimal" value="${esc(val)}"${attrs} title="${esc(title)}"></div>`;
+        }).join('')}</div>
+        <div class="hint" style="margin-top:6px">${help.slice(0, r.type === 'Sittes' ? 2 : 3).map(esc).join('<br>')}</div>
+      </details>`;
+      return `<div class="prod" data-row="${r.id}">
+        <div class="prod-head"><input type="text" data-f="name" value="${esc(r.name)}" aria-label="Termék neve"><button class="ghost" data-act="del" aria-label="Termék törlése">✕</button></div>
+        <div class="grid3">
+          <div class="field"><label>Típus</label><select data-f="type">${types.map((t) => `<option${t === r.type ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></div>
+          <div class="field"><label>Darab</label><input type="text" data-f="qty" inputmode="numeric" value="${esc(r.qty)}"></div>
+          <div class="field"><label>Vastagság (mm)</label><input type="text" data-f="thick" inputmode="decimal" value="${esc(r.thick)}"></div>
+        </div>
+        ${other
+          ? `<div class="actions"><button class="small" data-act="dxf">${r.dxf_name ? 'DXF: ' + esc(r.dxf_name) : 'DXF betöltése…'}</button></div>
+             ${r.dxf_id && !dxfData.has(r.dxf_id) ? '<div class="banner">A rajz nem maradt meg ebben a böngészőben – töltsd be újra a DXF-et.</div>' : ''}
+             ${r.dxf_sum ? `<div class="dxfsum">${esc(r.dxf_sum)}</div>` : ''}`
+          : `<div class="actions"><button class="small" data-act="sketch"${busyCalc ? ' disabled' : ''}>Méretek rajz szerint…${at ? ` (alja ${esc(at)} mm)` : ''}</button></div>${dims}`}
+      </div>`;
+    }).join('') || '<div class="hint">Nincs termék. Adj hozzá egyet.</div>';
+  }
+  function rowOf(el) { const n = el.closest('[data-row]'); return n && S.rows.find((r) => r.id === n.dataset.row); }
+
+  $('prods').addEventListener('input', (e) => {
+    const el = e.target, r = rowOf(el); if (!r) return;
+    if (el.dataset.f) r[el.dataset.f] = el.value;
+    if (el.dataset.cell) {
+      r.cells[el.dataset.cell] = el.value;
+      if (r.type === 'ABO_A' && +el.dataset.cell >= 9) { const f = $('c8-' + r.id); if (f) f.value = aboAFront(r); }
+    }
+    save();
+  });
+  $('prods').addEventListener('change', (e) => {
+    const el = e.target, r = rowOf(el); if (!r || el.dataset.f !== 'type') return;
+    r.type = el.value; save(); renderRows();
+    if (r.type === OTHER) { if (!r.dxf_id) pickDxf(r); return; }
+    // ABO-ra váltáskor, ha még nincsenek oldalméretek, rögtön nyílik a rajz
+    if ((r.type === 'ABO_A' || r.type === 'ABO_B') && ![9, 10, 11].some((c) => String(r.cells[c] ?? '').trim())) openSketch(r);
+  });
+  $('prods').addEventListener('toggle', (e) => { const d = e.target; if (d.dataset && d.dataset.det) { const r = S.rows.find((x) => x.id === d.dataset.det); if (r) { r.open = d.open; save(); } } }, true);
+  $('prods').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return; const r = rowOf(b); if (!r) return;
+    if (b.dataset.act === 'del') {
+      if (b.dataset.arm !== '1') { b.dataset.arm = '1'; b.textContent = 'Törlöd?'; setTimeout(() => { if (b.isConnected) { b.dataset.arm = ''; b.textContent = '✕'; } }, 4000); return; }
+      S.rows = S.rows.filter((x) => x !== r); if (r.dxf_id) { dxfData.delete(r.dxf_id); ldel(KEY_DXF + r.dxf_id); }
+      save(); renderRows(); return;
+    }
+    if (b.dataset.act === 'sketch') openSketch(r);
+    if (b.dataset.act === 'dxf') pickDxf(r);
+  });
+  $('addProd').addEventListener('click', () => { S.rows.push(newRow({ open: true })); save(); renderRows(); });
+  $('addDxf').addEventListener('click', () => { const r = newRow({ name: `Egyéb ${S.rows.length + 1}`, type: OTHER }); S.rows.push(r); save(); renderRows(); pickDxf(r, true); });
+
+  // ---------- egyéb alkatrész: DXF ----------
+  let dxfTarget = null;
+  function pickDxf(r, removeIfCancel) { dxfTarget = { r, removeIfCancel }; $('dxfFile').value = ''; $('dxfFile').click(); }
+  $('dxfFile').addEventListener('change', async (e) => {
+    const f = e.target.files[0], t = dxfTarget; dxfTarget = null; if (!t) return;
+    if (!f) { if (t.removeIfCancel && !t.r.dxf_id) { S.rows = S.rows.filter((x) => x !== t.r); save(); renderRows(); } return; }
+    const bytes = new Uint8Array(await f.arrayBuffer());
+    const r = t.r, id = uid();
+    let name = r.name.trim();
+    if (!name || /^(Termék|Egyéb) \d+$/.test(name)) name = f.name.replace(/\.dxf$/i, '');
+    toast('DXF beolvasása… (első alkalommal a DXF-modult is letölti)', 20000);
+    let res;
+    try { res = await call('dxf_load', { path: `/work/dxf/${id}.dxf`, bytes, name }); }
+    catch (err) { toast('DXF betöltése: ' + err.message); return; }
+    if (res.error) { toast('DXF betöltése: ' + res.error, 8000); if (t.removeIfCancel && !r.dxf_id) { S.rows = S.rows.filter((x) => x !== r); save(); renderRows(); } return; }
+    if (r.dxf_id) { dxfData.delete(r.dxf_id); ldel(KEY_DXF + r.dxf_id); }
+    Object.assign(r, { name, dxf_id: id, dxf_name: f.name, dxf_sum: res.summary });
+    dxfData.set(id, bytes);
+    let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    try { localStorage.setItem(KEY_DXF + id, btoa(bin)); } catch (err) { /* nagy fájl: csak ebben a munkamenetben marad meg */ }
+    save(); renderRows();
+    toast(`${f.name} betöltve. A darabszámot és a vastagságot a kártyán add meg.`);
+  });
+
+  // ================= rajzos méretmegadás =================
+  const NS = 'http://www.w3.org/2000/svg';
+  let SK = null;   // {row, key, cfg, vals, linked, srcOf, front, info}
+  function openSketch(r, key, carry) {
+    if (!INFO) { toast('A számítóprogram még töltődik…'); return; }
+    if (busyCalc) { toast('Számítás közben a rajz nem nyitható meg.'); return; }
+    key = key || (r.type === 'Sittes' && r.extras.sittes_fold === '1' ? 'Sittes_fold' : r.type);
+    const cfg = INFO.sketches[key]; if (!cfg) return;
+    const vals = {};
+    for (const [name, [target]] of Object.entries(cfg.fields)) vals[name] = String((typeof target === 'string' ? r.extras[target] : r.cells[target]) ?? '').trim();
+    // ha a rejtett felbontás (pl. B + A) még nincs meg, a táblázat teljes értékéből indul
+    for (const [col, [fb, fa]] of Object.entries(cfg.derived)) if (!vals[fb] && !vals[fa]) vals[fb] = String(r.cells[col] ?? '').trim();
+    if (carry) for (const [k, v] of Object.entries(carry)) if (k in cfg.fields) vals[k] = v;
+    const srcOf = {}; for (const [src, ts] of Object.entries(cfg.links)) for (const t of ts) srcOf[t] = src;
+    const linked = {};
+    for (const [t, src] of Object.entries(srcOf)) linked[t] = !vals[t] || vals[t] === vals[src];
+    for (let i = 0; i < 3; i++) for (const [t, src] of Object.entries(srcOf)) if (linked[t] && !vals[t]) vals[t] = vals[src];
+    SK = { row: r, key, cfg, vals, linked, srcOf, front: '–', info: '' };
+    renderSketch();
+    $('modal').hidden = false; $('modalBar').hidden = false; document.body.style.overflow = 'hidden';
+    $('modal').scrollTop = 0;
+    recalcSketch();
+  }
+  function closeSketch() { SK = null; $('modal').hidden = true; $('modalBar').hidden = true; $('modal').innerHTML = ''; document.body.style.overflow = ''; }
+
+  function sketchSVG() {
+    const { cfg, vals, linked } = SK, sk = cfg.sketch, [W, H] = sk.size;
+    const P = (pts) => pts.map((p) => p.join(',')).join(' ');
+    let s = `<svg xmlns="${NS}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(cfg.title)}"><defs><marker id="ar" viewBox="0 0 10 10" refX="0" refY="5" markerWidth="10" markerHeight="8" orient="auto-start-reverse"><path d="M0,5 L10,1.5 L10,8.5 z" fill="#39d353"/></marker></defs>`;
+    for (const [pts] of sk.ghost || []) s += `<polygon points="${P(pts)}" fill="none" stroke="#6b7380" stroke-dasharray="6 4"/>`;
+    for (const [pts, closed] of sk.outline) s += `<${closed ? 'polygon' : 'polyline'} points="${P(pts)}" fill="none" stroke="#e8e8e8" stroke-width="1.6"/>`;
+    for (const [a, b] of sk.bend) s += `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="#ff4d4d" stroke-width="1.4" stroke-dasharray="10 3 2 3"/>`;
+    for (const [p1, p2, e1, e2] of sk.dims) {
+      s += `<g stroke="#39d353" stroke-width="1.2"><line x1="${e1[0]}" y1="${e1[1]}" x2="${p1[0]}" y2="${p1[1]}"/><line x1="${e2[0]}" y1="${e2[1]}" x2="${p2[0]}" y2="${p2[1]}"/>`;
+      s += `<line x1="${p1[0]}" y1="${p1[1]}" x2="${p2[0]}" y2="${p2[1]}" marker-start="url(#ar)" marker-end="url(#ar)"/></g>`;
+    }
+    for (const [x, y, txt, size] of sk.texts) s += `<text x="${x}" y="${y}" fill="#e8e8e8" font-size="${size * 1.33}" font-family="Arial, sans-serif">${esc(txt)}</text>`;
+    const IW = 84, IH = 26;
+    for (const [name, [cx, cy]] of Object.entries(sk.inputs)) {
+      const opt = cfg.optional.includes(name), v = vals[name];
+      const col = opt ? '#8a8f98' : linked[name] ? '#5b8f66' : '#39d353';
+      s += `<g class="inp" data-go="${name}"><rect x="${cx - IW / 2}" y="${cy - IH / 2}" width="${IW}" height="${IH}" rx="3" fill="#11151a" stroke="${col}"/>`;
+      s += `<text x="${cx}" y="${cy + 5}" text-anchor="middle" font-size="14" font-weight="bold" font-family="Arial, sans-serif" fill="${v ? (linked[name] ? '#bfe9c6' : '#fff') : '#6b7380'}"${linked[name] ? ' font-style="italic"' : ''}>${esc(v || '?')}</text></g>`;
+    }
+    if (sk.calc_front) {
+      const [cx, cy] = sk.calc_front;
+      s += `<rect x="${cx - IW / 2}" y="${cy - IH / 2}" width="${IW}" height="${IH}" rx="3" fill="none" stroke="#ffd166" stroke-dasharray="3 2"/><text id="skFront" x="${cx}" y="${cy + 5}" text-anchor="middle" font-size="14" fill="#ffd166" font-family="Arial, sans-serif">${esc(SK.front)}</text>`;
+    }
+    return s + '</svg>';
+  }
+  function renderSketch() {
+    const { cfg, vals, linked, key } = SK;
+    const tog = cfg.toggle ? `<label class="check"><input type="checkbox" id="skFold"${key === 'Sittes_fold' ? ' checked' : ''}> Hajtás megadása a homlok- és hátlapnál (B a hajlítási vonalig + A a hajtás)</label>` : '';
+    $('modal').innerHTML = `<div class="modal-in">
+      <h2 id="mTitle">${esc(cfg.title)} – ${esc(SK.row.name)}</h2>
+      ${tog}
+      <div class="skwrap" id="skSvg">${sketchSVG()}</div>
+      <div class="hint">A rajzon a mezőre koppintva ugrik a hozzá tartozó beviteli sorra. A dőlt, halványabb érték automatikusan átvett, de átírható.</div>
+      <div class="skinfo" id="skInfo">${esc(SK.info || '…')}</div>
+      <div class="skfields">${Object.entries(cfg.fields).map(([name, [, lab]]) =>
+        `<div class="skf${cfg.optional.includes(name) ? ' opt' : ''}${linked[name] ? ' auto' : ''}" id="skf-${name}"><label for="sk-${name}">${esc(lab)}</label><input type="text" id="sk-${name}" data-sk="${name}" inputmode="decimal" value="${esc(vals[name])}"></div>`).join('')}</div>
+    </div>`;
+    const fold = $('skFold');
+    if (fold) fold.addEventListener('change', toggleFold);
+  }
+  function refreshSketchView() {
+    $('skSvg').innerHTML = sketchSVG();
+    for (const name of Object.keys(SK.cfg.fields)) {
+      const box = $('skf-' + name), inp = $('sk-' + name);
+      box.classList.toggle('auto', !!SK.linked[name]);
+      if (inp !== document.activeElement && inp.value !== SK.vals[name]) inp.value = SK.vals[name];
+    }
+  }
+  // ugyanaz, mint a SketchDialog.on_change: az összekapcsolt mezők követik a forrást
+  function skChange(name) {
+    for (const t of SK.cfg.links[name] || []) if (SK.linked[t]) { SK.vals[t] = SK.vals[name]; skChange(t); }
+    if (name in SK.srcOf) { const txt = SK.vals[name].trim(); SK.linked[name] = !txt || txt === SK.vals[SK.srcOf[name]].trim(); }
+  }
+  $('modal').addEventListener('input', (e) => {
+    const n = e.target.dataset && e.target.dataset.sk; if (!n || !SK) return;
+    SK.vals[n] = e.target.value; skChange(n); refreshSketchView(); recalcSketch();
+  });
+  $('modal').addEventListener('click', (e) => {
+    const g = e.target.closest('[data-go]'); if (!g) return;
+    const box = $('skf-' + g.dataset.go), inp = $('sk-' + g.dataset.go);
+    box.scrollIntoView({ block: 'center', behavior: 'smooth' }); inp.focus({ preventScroll: true });
+    box.classList.add('flash'); setTimeout(() => box.classList.remove('flash'), 900);
+  });
+  let skSeq = 0;
+  async function recalcSketch() {
+    if (!SK) return;
+    const my = ++skSeq, key = SK.key;
+    try {
+      const [info, front] = await call('sketch_calc', { key, values: SK.vals, flange: flangeSum() });
+      if (!SK || my !== skSeq) return;
+      SK.info = info; $('skInfo').textContent = info;
+      if (front != null) { SK.front = front; const f = $('skFront'); if (f) f.textContent = front; }
+    } catch (err) { if (SK) $('skInfo').textContent = err.message; }
+  }
+  // Sittes: hajtás kapcsoló – a beírt értékek átkerülnek a másik rajzra
+  function toggleFold() {
+    const { row, cfg } = SK;
+    const carry = { ...SK.vals }, other = cfg.toggle[0];
+    for (const pre of ['hom', 'hat']) {
+      const b = carry[pre + '_B'] || '', a = carry[pre + '_A'] || '';
+      if (other === 'Sittes') { const bb = numOf(b), aa = a ? numOf(a) : 0; if (bb != null && aa != null) carry[pre + '_B'] = String(+(bb + aa).toFixed(6)); }
+      else carry[pre + '_A'] = '';
+    }
+    openSketch(row, other, carry);
+  }
+  $('mCancel').addEventListener('click', closeSketch);
+  $('mOk').addEventListener('click', async () => {
+    if (!SK) return;
+    const { cfg, vals, row, key } = SK;
+    const pos = (n) => { const v = numOf(vals[n]); return v != null && v > 0; };
+    const missing = Object.keys(cfg.fields).filter((n) => !cfg.optional.includes(n) && !pos(n)).map((n) => cfg.fields[n][1]);
+    const badOpt = Object.keys(cfg.fields).filter((n) => cfg.optional.includes(n) && vals[n].trim() && !pos(n)).map((n) => cfg.fields[n][1]);
+    if (missing.length || badOpt.length) { alert('Hiányzó vagy hibás méret. Ellenőrizd ezeket:\n• ' + missing.concat(badOpt).join('\n• ')); return; }
+    let err = null;
+    try { [, , err] = await call('sketch_calc', { key, values: vals, flange: flangeSum() }); } catch (e) { err = e.message; }
+    if (err) { alert(err); return; }
+    for (const [name, [target]] of Object.entries(cfg.fields)) {
+      if (typeof target === 'string') row.extras[target] = vals[name].trim(); else row.cells[target] = vals[name].trim();
+    }
+    for (const [col, [fb, fa]] of Object.entries(cfg.derived)) {
+      const b = numOf(vals[fb]), a = vals[fa].trim() ? numOf(vals[fa]) : 0;
+      if (b != null && a != null) row.cells[col] = String(+(b + a).toFixed(6));
+    }
+    if (row.type === 'Sittes') {
+      askAljaThick(row);
+      row.extras.sittes_fold = key === 'Sittes_fold' ? '1' : '';
+      // a hajtásos felbontás nem érvényes többé (a teljes magasság a táblázatban van)
+      if (key === 'Sittes') for (const k of ['hom_A', 'hat_A', 'hom_B', 'hat_B']) row.extras[k] = '';
+    }
+    closeSketch(); save(); renderRows();
+  });
+  // Sittes: az alja lemezvastagsága egyezik-e a többi lemezével; ha nem, bekéri
+  function askAljaThick(r) {
+    const t = numOf(r.thick || (INFO && INFO.default_thickness)) || 2;
+    if (confirm(`Az alja lemezvastagsága megegyezik a többi oldal lemezvastagságával (${String(t).replace('.', ',')} mm)?`)) { r.extras.alja_thick = ''; return; }
+    const cur = numOf(r.extras.alja_thick) || t;
+    const ans = prompt('Az alja lemezvastagsága (mm):', String(cur).replace('.', ','));
+    if (ans == null) return;
+    const v = numOf(ans);
+    if (v == null || v <= 0 || v >= 100) { toast('Hibás vastagság, nem változott.'); return; }
+    r.extras.alja_thick = Math.abs(v - t) > 1e-9 ? String(v) : '';
+  }
+
+  // ================= beállítások és anyag =================
+  function bindSettings() {
+    document.querySelectorAll('[data-s]').forEach((el) => {
+      const k = el.dataset.s;
+      if (el.type === 'checkbox') { el.checked = !!S.set[k]; el.addEventListener('change', () => { S.set[k] = el.checked; save(); }); }
+      else { el.value = S.set[k]; el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', () => { S.set[k] = el.tagName === 'SELECT' ? +el.value : el.value; save(); }); }
+    });
+  }
+  $('material').value = S.material;
+  let matT = 0;
+  $('material').addEventListener('input', () => { S.material = $('material').value; save(); clearTimeout(matT); matT = setTimeout(checkMaterial, 400); });
+  $('matFileBtn').addEventListener('click', () => $('matFile').click());
+  $('matFile').addEventListener('change', async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    const buf = await f.arrayBuffer();
+    // a Jegyzettömb gyakran ANSI (Windows-1250) kódolással ment
+    let txt; try { txt = new TextDecoder('utf-8', { fatal: true }).decode(buf).replace(/^﻿/, ''); } catch (err) { txt = new TextDecoder('windows-1250').decode(buf); }
+    S.material = $('material').value = txt; save(); checkMaterial(); e.target.value = '';
+  });
+  async function checkMaterial() {
+    if (!workerReady || busyCalc) return;
+    try {
+      const r = await call('material', { text: S.material });
+      $('matInfo').textContent = r.error ? '⚠ ' + r.error : `Táblaméretek: ${r.sheets.join(', ')}${r.material ? ' · anyag: ' + r.material : ''}`;
+    } catch (err) { $('matInfo').textContent = '⚠ ' + err.message; }
+  }
+
+  // ================= számítás =================
+  let calcT0 = 0, calcLimit = 0, calcMsg = '', tick = 0;
+  function showProgress() {
+    const el = (Date.now() - calcT0) / 1000;
+    $('progress').textContent = `${calcMsg}\n\nEltelt idő: ${el.toFixed(0)} / ${calcLimit} mp`;
+  }
+  function setBusy(on) {
+    busyCalc = on;
+    $('calcBtn').disabled = on || !workerReady; $('cancelBtn').hidden = !on;
+    $('progress').hidden = !on;
+    document.querySelectorAll('[data-act="sketch"]').forEach((b) => { b.disabled = on; });
+    ['dlDxf', 'dlLaser', 'dlQuote', 'toArkalk'].forEach((id) => { $(id).disabled = on; });
+  }
+  let last = null;   // {text, drawing, quote, fresh}
+  $('calcBtn').addEventListener('click', async () => {
+    const missing = S.rows.filter((r) => r.type === OTHER && r.dxf_id && !dxfData.has(r.dxf_id));
+    if (missing.length) { toast(`Töltsd be újra a DXF-et: ${missing.map((r) => r.name).join(', ')}`); return; }
+    const rows = S.rows.map((r) => ({ name: r.name, type: r.type, qty: r.qty, thick: r.thick, cells: r.cells, extras: r.extras,
+      dxf_path: r.type === OTHER && r.dxf_id ? `/work/dxf/${r.dxf_id}.dxf` : '', dxf_name: r.dxf_name || '' }));
+    const dxfs = {};
+    for (const r of S.rows) if (r.type === OTHER && r.dxf_id) dxfs[`/work/dxf/${r.dxf_id}.dxf`] = dxfData.get(r.dxf_id);
+    calcT0 = Date.now(); calcLimit = numOf(S.set.time) ?? 0; calcMsg = 'Számolás folyamatban…';
+    setBusy(true); showProgress(); tick = setInterval(showProgress, 500);
+    $('progress').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    try {
+      const res = await call('calc', { params: { ...S.set, material: S.material, rows }, dxfs });
+      if (res.error) { alert(res.error); return; }
+      last = { ...res, fresh: true };
+      lset(KEY_RES, { text: res.text, drawing: res.drawing, quote: res.quote, at: new Date().toISOString() });
+      showResult();
+      $('h-calc').scrollIntoView({ behavior: 'smooth' });
+    } catch (err) {
+      if (err.message !== 'cancel') alert('Hiba: ' + err.message);
+    } finally { clearInterval(tick); setBusy(false); }
+  });
+  // a Python számítás nem szakítható meg belülről: a workert leállítjuk és újraindítjuk
+  $('cancelBtn').addEventListener('click', () => {
+    worker.terminate();
+    for (const p of pending.values()) p.rej(new Error('cancel'));
+    pending.clear();
+    clearInterval(tick); setBusy(false);
+    $('calcBtn').disabled = true;
+    toast('A számítás megszakítva.');
+    startWorker();
+  });
+
+  function showResult() {
+    $('resultBox').hidden = false;
+    $('resultText').textContent = last.text;
+    $('staleNote').hidden = last.fresh;
+    $('dlDxf').disabled = $('dlLaser').disabled = !last.fresh;
+    drawSheets(last.drawing);
+  }
+
+  // A lemezek rajza: a DXF-hez képest 90°-kal elforgatva, hogy a hosszú oldal vízszintes legyen
+  function drawSheets(sheets) {
+    $('sheets').innerHTML = sheets.map((s, i) => {
+      const W = s.h, H = s.w;                 // képernyő: x = tábla y, y = tábla x
+      const T = (p) => `${p[1]},${p[0]}`;
+      let g = `<rect x="0" y="0" width="${W}" height="${H}" fill="none" stroke="currentColor" stroke-width="${W / 400}"/>`;
+      if (s.cw !== s.w || s.ch !== s.h) g += `<rect x="${s.off}" y="${s.off}" width="${s.ch}" height="${s.cw}" fill="none" stroke="currentColor" stroke-dasharray="${W / 100} ${W / 150}" stroke-width="${W / 800}" opacity=".6"/>`;
+      let net = 0;
+      for (const pc of s.pieces) {
+        for (const [lab, pts] of pc.shapes) {
+          const hole = lab.endsWith(' (furat)');
+          let a = 0; for (let k = 0; k < pts.length; k++) { const p = pts[k], q = pts[(k + 1) % pts.length]; a += p[0] * q[1] - q[0] * p[1]; }
+          net += (hole ? -1 : 1) * Math.abs(a) / 2;
+          g += `<polygon points="${pts.map(T).join(' ')}" fill="${hole ? 'var(--bg)' : pc.res ? 'var(--piece-res)' : 'var(--piece)'}" stroke="${pc.res ? 'var(--piece-res-line)' : 'var(--piece-line)'}" stroke-width="${W / 600}"><title>${esc(pc.tag + ' ' + lab)}</title></polygon>`;
+        }
+        for (const [lab, pts] of pc.shapes) {
+          if (lab.endsWith(' (furat)')) continue;
+          const xs = pts.map((p) => p[1]), ys = pts.map((p) => p[0]);
+          const bw = Math.max(...xs) - Math.min(...xs), bh = Math.max(...ys) - Math.min(...ys);
+          const cx = xs.reduce((a, b) => a + b, 0) / xs.length, cy = ys.reduce((a, b) => a + b, 0) / ys.length;
+          const t1 = pc.tag, t2 = lab;
+          const fs = Math.max(W / 90, Math.min(bh / 4.5, bw / (Math.max(t1.length, t2.length) * 0.62), W / 28));
+          g += `<text x="${cx}" y="${cy - fs * 0.15}" text-anchor="middle" font-size="${fs}" fill="currentColor" font-family="Arial, sans-serif">${esc(t1)}</text>`;
+          g += `<text x="${cx}" y="${cy + fs * 0.95}" text-anchor="middle" font-size="${fs}" fill="currentColor" font-family="Arial, sans-serif" font-weight="bold">${esc(t2)}</text>`;
+        }
+      }
+      const util = 100 * net / (s.w * s.h);
+      const pad = W / 60;
+      return `<div class="sheet"><h3>${i + 1}. lemez · ${s.w} × ${s.h} mm${s.thick ? ` · ${String(s.thick).replace('.', ',')} mm` : ''} <span class="meta">(kihasználtság ${util.toFixed(1).replace('.', ',')} %)</span></h3>
+        <svg viewBox="${-pad} ${-pad} ${W + 2 * pad} ${H + 2 * pad}" role="img" aria-label="${i + 1}. lemez kiosztása">${g}</svg></div>`;
+    }).join('');
+  }
+
+  // ---------- exportok ----------
+  async function deliver(bytes, filename, mime) {
+    const blob = new Blob([bytes], { type: mime });
+    // iPhone-on a megosztás menüből menthető a Fájlokba, küldhető e-mailben, AirDroppal
+    try {
+      const file = new File([blob], filename, { type: mime });
+      if (navigator.canShare && navigator.canShare({ files: [file] }) && /iPhone|iPad|Android/i.test(navigator.userAgent)) { await navigator.share({ files: [file], title: filename }); return; }
+    } catch (err) { if (err && err.name === 'AbortError') return; }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+  }
+  $('dlQuote').addEventListener('click', () => {
+    if (!last) return;
+    deliver(new TextEncoder().encode(JSON.stringify(last.quote.data, null, 2)), last.quote.filename, 'application/json');
+  });
+  $('dlDxf').addEventListener('click', async () => {
+    if (!last || !last.fresh) return;
+    const b = $('dlDxf'); b.disabled = true;
+    try { const bytes = await call('export_dxf'); await deliver(bytes, last.quote.filename.replace(/_szabas\.json$/, '') + '_szabas.dxf', 'application/dxf'); }
+    catch (err) { if (err.message !== 'cancel') alert('DXF export sikertelen:\n' + err.message); }
+    finally { b.disabled = false; }
+  });
+  $('dlLaser').addEventListener('click', async () => {
+    if (!last || !last.fresh) return;
+    const b = $('dlLaser'); b.disabled = true;
+    try { const r = await call('export_laser'); toast(`${r.count} alkatrész-DXF + darabjegyzek.txt elkészült.`); await deliver(r.bytes, last.quote.filename.replace(/_szabas\.json$/, '') + '_lezer.zip', 'application/zip'); }
+    catch (err) { if (err.message !== 'cancel') alert('Lézer export sikertelen:\n' + err.message); }
+    finally { b.disabled = false; }
+  });
+  // összekötés: az Árkalkulátor (index.html) a következő megnyitáskor felajánlja a betöltést
+  $('toArkalk').addEventListener('click', () => {
+    if (!last) return;
+    if (!lset(KEY_XFER, { ...last.quote.data, atadva: new Date().toISOString() })) { toast('Nem sikerült átadni (a böngésző tárhelye nem írható).'); return; }
+    location.href = 'index.html';
+  });
+  $('copyRes').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(last ? last.text : ''); toast('Az eredmény a vágólapon.'); } catch (e) { toast('A másolás nem sikerült.'); }
+  });
+
+  // ================= indulás =================
+  async function onReady() {
+    $('calcBtn').disabled = busyCalc;
+    if (INFO) { checkMaterial(); return; }   // újraindított worker (megszakítás után)
+    try { INFO = await call('info'); } catch (err) { setStatus('Hiba: ' + err.message, true); return; }
+    $('ver').textContent = 'Szabásprogram ' + INFO.version;
+    $('sMerge').innerHTML = INFO.merge_modes.map((m, i) => `<option value="${i}"${i === +S.set.merge ? ' selected' : ''}>${esc(m)}</option>`).join('');
+    $('sideHelp').innerHTML = Object.entries(INFO.side_help).map(([t, v]) => `<b>${esc(t)}:</b> ${v.map(esc).join('; ')}`).join('<br>') +
+      '<br><i>ABO_A: a két trapéz alakú oldalt a program 180°-ban egymásba fordítva is megpróbálja kiszabni. ABO típusoknál a hátlap, a homloklap és az oldalak felső élére a program rászámolja a perem kiterített szélességét (alapból 30+25 mm) – a magasságokat kész méretben add meg.</i>';
+    $('laserLbl').textContent = `Lézeres vágás (a táblán legfeljebb ${INFO.max_cut} mm hosszan vág; kikapcsolva a teljes, 3000 mm-es hossz használható)`;
+    renderRows(); checkMaterial();
+  }
+
+  if (!S.rows.length) S.rows.push(newRow({ name: 'Termék 1', open: true }));
+  bindSettings(); renderRows();
+  const prev = lget(KEY_RES);
+  if (prev && prev.text && prev.quote) { last = { ...prev, fresh: false }; showResult(); }
+  startWorker();
+})();
+</script>
+</body>
+</html>

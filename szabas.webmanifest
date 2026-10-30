@@ -1,0 +1,14 @@
+{
+  "name": "Konténer lemezszabás",
+  "short_name": "Szabás",
+  "start_url": "szabas.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#eef1f3",
+  "theme_color": "#1d5e86",
+  "lang": "hu",
+  "icons": [
+    { "src": "szabas/ikon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "szabas/ikon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
