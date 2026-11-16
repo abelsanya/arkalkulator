@@ -681,7 +681,7 @@ td.r, th.r { text-align: right; }
           <button id="copyTotal">Csak a végösszeg másolása</button>
           <button id="exportXlsx">Anyaglista Excelbe</button>
         </div>
-        <div class="hint">Az árak a Timár Vasker, a tetolemez.hu és a metallonova.hu webáruház bruttó árai, a nettó ár ezekből számolt (÷ 1,27). A Wordbe másolt táblázat soraiban az árak már a haszonnal növelve szerepelnek, külön haszon-sor nélkül. Az Excel-anyaglista tételesen tartalmazza az anyagokat méretekkel, a beszerzési és az ajánlati árral. A kg-os anyagok átváltása és a súly elméleti tömeggel (acél 7,85 kg/dm³, szabványos szelvénytáblák) számolt, a lekerekített sarkok miatt a valós súly pár százalékkal kevesebb lehet.</div>
+        <div class="hint">Az árak a Timár Vasker, a tetolemez.hu, a metallonova.hu és a kerekrendelo.hu webáruház bruttó árai, a nettó ár ezekből számolt (÷ 1,27). A Wordbe másolt táblázat soraiban az árak már a haszonnal növelve szerepelnek, külön haszon-sor nélkül. Az Excel-anyaglista tételesen tartalmazza az anyagokat méretekkel, a beszerzési és az ajánlati árral. A kg-os anyagok átváltása és a súly elméleti tömeggel (acél 7,85 kg/dm³, szabványos szelvénytáblák) számolt, a lekerekített sarkok miatt a valós súly pár százalékkal kevesebb lehet.</div>
       </section>
       </div>`;
     bindProject();
@@ -1171,7 +1171,7 @@ td.r, th.r { text-align: right; }
       if (!cm.has(it.c)) cm.set(it.c, new Set()); cm.get(it.c).add(it.s);
     });
     CATS = [...cm].map(([c, s]) => ({ c, subs: [...s] }));
-    $('meta').innerHTML = `Timár Vasker + tetolemez.hu + metallonova.hu · ${fmt.format(DATA.items.length)} termék · frissítve: <span class="num">${esc(DATA.date)}</span>`;
+    $('meta').innerHTML = `Timár Vasker + tetolemez.hu + metallonova.hu + kerekrendelo.hu · ${fmt.format(DATA.items.length)} termék · frissítve: <span class="num">${esc(DATA.date)}</span>`;
     render();
     Store.init();
   }).catch(() => { $('meta').textContent = 'Az árlistát nem sikerült betölteni. Frissítsd az oldalt.'; });
