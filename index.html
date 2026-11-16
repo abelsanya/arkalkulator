@@ -679,8 +679,9 @@ td.r, th.r { text-align: right; }
         <div class="actions">
           <button class="primary" id="copyTable">Táblázat másolása Wordbe</button>
           <button id="copyTotal">Csak a végösszeg másolása</button>
+          <button id="exportXlsx">Anyaglista Excelbe</button>
         </div>
-        <div class="hint">Az árak a Timár Vasker, a tetolemez.hu és a metallonova.hu webáruház bruttó árai, a nettó ár ezekből számolt (÷ 1,27). A Wordbe másolt táblázat soraiban az árak már a haszonnal növelve szerepelnek, külön haszon-sor nélkül. A kg-os anyagok átváltása és a súly elméleti tömeggel (acél 7,85 kg/dm³, szabványos szelvénytáblák) számolt, a lekerekített sarkok miatt a valós súly pár százalékkal kevesebb lehet.</div>
+        <div class="hint">Az árak a Timár Vasker, a tetolemez.hu és a metallonova.hu webáruház bruttó árai, a nettó ár ezekből számolt (÷ 1,27). A Wordbe másolt táblázat soraiban az árak már a haszonnal növelve szerepelnek, külön haszon-sor nélkül. Az Excel-anyaglista tételesen tartalmazza az anyagokat méretekkel, a beszerzési és az ajánlati árral. A kg-os anyagok átváltása és a súly elméleti tömeggel (acél 7,85 kg/dm³, szabványos szelvénytáblák) számolt, a lekerekített sarkok miatt a valós súly pár százalékkal kevesebb lehet.</div>
       </section>
       </div>`;
     bindProject();
@@ -754,6 +755,7 @@ td.r, th.r { text-align: right; }
     $('szabFile').addEventListener('change', async (e) => { const f = e.target.files[0]; if (f) importSzabas(await f.text()); e.target.value = ''; });
     $('copyTable').addEventListener('click', copyTable);
     $('copyTotal').addEventListener('click', copyTotal);
+    $('exportXlsx').addEventListener('click', exportExcel);
   }
 
   // A projektnézet delegált eseménykezelői: egyszer kötjük be, a nézet újrarajzolása után is élnek
@@ -1003,6 +1005,90 @@ td.r, th.r { text-align: right; }
     const t = totals(cur);
     const text = `Nettó: ${ft(t.net)}, ÁFA ${fmt2.format(t.vat)}%: ${ft(t.vatAmt)}, bruttó: ${ft(t.gross)}` + (t.n > 1 ? ` (${t.n} db; egységár nettó ${ft(t.unitNet)}, bruttó ${ft(t.unitGross)})` : '');
     copy(`<span>${esc(text)}</span>`, text);
+  }
+
+  // ---------- Excel export ----------
+  let xlsxLib = null;
+  function loadXlsx() {
+    if (window.XLSX) return Promise.resolve(window.XLSX);
+    if (xlsxLib) return xlsxLib;
+    xlsxLib = new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      s.onload = () => (window.XLSX ? res(window.XLSX) : rej(new Error('xlsx')));
+      s.onerror = () => { xlsxLib = null; rej(new Error('xlsx')); };
+      document.head.appendChild(s);
+    });
+    return xlsxLib;
+  }
+  function excelRows() {
+    const t = totals(cur), r2 = (v) => Math.round(v * 100) / 100, r0 = (v) => Math.round(v);
+    const rows = [], money = [], bold = [];
+    const add = (row, opts = {}) => { rows.push(row); if (opts.bold) bold.push(rows.length - 1); };
+    add(['Anyaglista és árkalkuláció'], { bold: true });
+    add(['Projekt', cur.nev || '']);
+    if (cur.termekNev) add(['Terméktípus', cur.termekNev]);
+    add(['Darabszám', t.n]);
+    add(['Készült', new Date().toLocaleDateString('hu-HU')]);
+    add(['Árlista dátuma', DATA.date || '']);
+    add([]);
+    const head = ['Alkatrész', 'Megnevezés', 'Termék (árlista szerint)', 'Kategória', 'Méret', 'Vágási lista / megjegyzés', 'Mennyiség', 'Egység', 'Nettó beszerzési egységár (Ft)', 'Nettó beszerzési összeg (Ft)', 'Ajánlati nettó összeg (Ft)', 'Nettó súly (kg)', 'Forrás'];
+    add(head, { bold: true });
+    const first = rows.length;
+    (cur.reszek || []).forEach((part) => part.sorok.forEach((l) => {
+      const c = lineCalc(l, t.n); if (!c || !c.q) return;
+      const it = c.it || {};
+      const mult = l.fix ? 1 : t.n;
+      const cuts = l.cuts && l.cuts.length ? l.cuts.map((x) => `${x.len} mm × ${x.n * mult}`).join(', ') : '';
+      const note = [l.poz ? 'poz. ' + l.poz : '', cuts ? 'darabok: ' + cuts : '', c.r.note || ''].filter(Boolean).join('; ');
+      add([part.nev, l.cimke || '', it.n || '', c.custom ? 'Kézi tétel' : [it.c, it.s].filter(Boolean).join(' / '), it.m || '', note,
+        r2(c.r.bill), c.r.billUnit || '', r2(c.netPer), r0(c.net), r0(c.net * t.mul * t.hmul), c.kg == null ? '' : r2(c.kg), it.url || '']);
+    }));
+    const last = rows.length;
+    if (last > first) add(['Anyag összesen', '', '', '', '', '', '', '', '', r0(t.matCost), r0(t.mat * t.hmul), r2(t.kg), ''], { bold: true });
+    const svcs = (cur.szolg || []).filter((s) => s.name || num(s.price));
+    if (svcs.length) {
+      add([]);
+      add(['Munkadíj és szolgáltatások', '', '', '', '', '', 'Mennyiség', 'Egység', 'Nettó egységár (Ft)', 'Nettó összeg (Ft)', 'Ajánlati nettó összeg (Ft)'], { bold: true });
+      svcs.forEach((s) => { const q = svcQty(s, t.kg); add([s.name, '', '', '', '', '', r2(q), s.unit || '', r2(num(s.price)), r0(q * num(s.price)), r0(q * num(s.price) * t.hmul)]); });
+    }
+    add([]);
+    add(['Összesítő'], { bold: true });
+    const sum = [['Anyag beszerzési ára (nettó)', t.matCost], [`Anyag (nettó, ${fmt2.format(t.m)}% árréssel)`, t.mat], ['Munkadíj és szolgáltatások (nettó)', t.svc], ['Önköltség (nettó)', t.base], [`Haszon ${fmt2.format(t.h)}%`, t.profit], ['Nettó összesen' + (t.n > 1 ? ` (${t.n} db)` : ''), t.net], [`ÁFA ${fmt2.format(t.vat)}%`, t.vatAmt], ['Bruttó összesen' + (t.n > 1 ? ` (${t.n} db)` : ''), t.gross]];
+    if (t.n > 1) sum.push(['Egységár (1 db) nettó', t.unitNet], ['Egységár (1 db) bruttó', t.unitGross]);
+    sum.forEach(([k, v], i) => { add([k, r0(v)], { bold: i === 5 || i === 7 }); money.push(rows.length - 1); });
+    return { rows, bold, money, first, head };
+  }
+  async function exportExcel() {
+    flushSave();
+    let X;
+    try { X = await loadXlsx(); } catch (e) { toast('Az Excel-modul nem töltődött be. Ellenőrizd az internetkapcsolatot, és próbáld újra.'); return; }
+    const { rows, money } = excelRows();
+    const ws = X.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [18, 26, 38, 30, 16, 40, 11, 8, 16, 16, 16, 12, 50].map((w) => ({ wch: w }));
+    Object.keys(ws).forEach((a) => {
+      if (a[0] === '!') return;
+      const cell = ws[a], rc = X.utils.decode_cell(a);
+      if (cell.t !== 'n') return;
+      if ((rc.c === 9 || rc.c === 10) || (rc.c === 1 && money.includes(rc.r))) cell.z = '#,##0" Ft"';
+      else if (rc.c === 8) cell.z = '#,##0.00" Ft"';
+      else if (rc.c === 6 || rc.c === 11) cell.z = '#,##0.##';
+    });
+    const wb = X.utils.book_new();
+    X.utils.book_append_sheet(wb, ws, 'Anyaglista');
+    const data = X.write(wb, { bookType: 'xlsx', type: 'array' });
+    const safe = (cur.nev || 'projekt').replace(/[\\/:*?"<>|]+/g, '').trim().slice(0, 80) || 'projekt';
+    const filename = `${safe} anyaglista ${new Date().toISOString().slice(0, 10)}.xlsx`;
+    const blob = new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    let dl = null;
+    if (window.claude && typeof window.claude.use === 'function') { try { dl = await window.claude.use('downloads'); } catch (e) { dl = null; } }
+    if (dl) {
+      try { await dl.save({ filename, data: blob }); toast('Excel elmentve.'); }
+      catch (e) { if (e && e.code === 'declined') return; toast(e && e.code === 'rate_limited' ? 'Már nyitva van egy mentési ablak, várj egy kicsit.' : 'A mentés itt nem sikerült.'); }
+      return;
+    }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   }
 
   // ---------- terméktípusok ----------
